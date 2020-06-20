@@ -711,86 +711,101 @@ output_file = open(fasta_file + '.enriched.human.length','w')
 output_file.write(''.join(output_file2_set))
 output_file.close()
 
-# annotate genes by our database all.pan-genome.snp.diamond.SARG.sh
-# annotate genes by kegg metacyc eggnog
-import os
-import glob
-from Bio import SeqIO
-from Bio.Seq import Seq
-annotation_dir = '/scratch/users/anniz44/genomes/pan-genome/allpangenome'
-annotation_files = glob.glob(os.path.join(annotation_dir,'all_flexible.Jay.cluster.multispecies.enriched.aa.*'))
-annotation_dir2 = '/scratch/users/anniz44/genomes/pan-genome/allpangenome/searchdatabase'
-selected_files = glob.glob(os.path.join(annotation_dir,'*.fasta.usearch.txt'))
-
 # gene selected percentage
 import os
 import glob
 from Bio import SeqIO
 from Bio.Seq import Seq
 
+# including Jay pangenome
 input_script = '/scratch/users/anniz44/scripts/1MG/pan-genome'
 input_dir1 = '/scratch/users/anniz44/genomes/pan-genome/roary/roary_*'
 input_dir2 = '/scratch/users/anniz44/genomes/donor_species/roary/roary_*'
 input_dir3 = '/scratch/users/anniz44/genomes/Jay/roary/roary_*'
-output_dir = '/scratch/users/anniz44/genomes/pan-genome/allpangenome/sumsub'
-mutation_dir = '/scratch/users/anniz44/genomes/donor_species/old/filtering_SNPs/summary'
+output_dir = '/scratch/users/anniz44/genomes/pan-genome/allpangenome'
+mutation_dir = '/scratch/users/anniz44/genomes/donor_species/selected_species/vcf_merge_round2/summary'
+mutation_dir2 = '/scratch/users/anniz44/genomes/donor_species/species/vcf_merge_round2'
+mutation_fasta = os.path.join(mutation_dir,'all.selected.gene.faa')
+all_fasta = os.path.join(output_dir,'all_flexible.Jay.cluster.multispecies.fasta')
+annotation_file = os.path.join(output_dir,'all.flexible.genome.annotation')
+#enrichment_file = os.path.join(output_dir,'all_flexible.Jay.cluster.multispecies.enriched.human.fasta')
+enrichment_file = os.path.join(output_dir,'all_flexible.Jay.cluster.multispecies.enriched.fasta')
+mutation_file = os.path.join(mutation_dir,'all.donor.species.sum.txt.High_select2.txt')
+mutation_mapping_file = os.path.join(output_dir,'all_flexible.Jay.cluster.multispecies.fasta.selectedgene.usearch.txt')
+pangenome_info = os.path.join(output_dir,'sumsub/all.mutation.sum') # generate previously by mapping genomes to pan-genome genes
 
-annotation_file = os.path.join(output_dir,'all.flexible.genome.noJay.annotation')
-cluster_uc = os.path.join(output_dir,'all_flexible.genome.fa.uc')
-enrichment_file = os.path.join(output_dir,'all_flexible.genome.fa.cluster.aa.multispecies.fasta.enriched.human.multispecies.fasta')
-mutation_file = os.path.join(mutation_dir,'all.snp.only.txt')
-mutation_mapping_file = os.path.join(output_dir,'all_flexible.genome.fa.cluster.aa.usearch.txt')
+# map enriched genes to mutation genes
+cutoff = 50
+cutoff2 = 80
+cmds = ("#diamond blastx --query %s --db %s.dmnd --out %s --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+            %(all_fasta,mutation_fasta,mutation_mapping_file,cutoff,cutoff2))
+os.system(cmds)
+
+# calculate pangenome size and copy
+donor_species_pan = dict()
+donor_species_mut = dict()
+for lines in open(pangenome_info,'r'):
+    if not lines.startswith('#'):
+        lines_set = lines.split('\n')[0].split('\t')
+        donor_species = lines_set[0]
+        pan_genome_length = float(lines_set[1])
+        genome_depth = float(lines_set[2])
+        donor_species_pan.setdefault(donor_species,[pan_genome_length,genome_depth])
+        donor_species2 = '_'.join(lines_set[0].split('_cluster')[0].split('_newcluster')[0].replace('_sp.','_sp').split('_')[1:])
+        if donor_species2 not in donor_species_mut:
+            donor_species_mut.setdefault(donor_species2, [float(pan_genome_length) * float(genome_depth),
+                                                          0])
+        else:
+            donor_species_mut[donor_species2][0] += float(pan_genome_length) * float(genome_depth)
 
 # load mutation rate
-donor_species_mut = dict()
 donor_species_mut_gene = dict()
 donor_species_mut_list = []
 for lines in open(mutation_file,'r'):
     lines_set = lines.split('\n')[0].split('\t')
-    geneID = lines_set[7]
-    if geneID == 'all':
-        donor_species = lines_set[0]
-        donor_species2 = '_'.join(lines_set[0].split('_cluster')[0].split('_newcluster')[0].split('_')[1:])
-        pan_genome_length = lines_set[11]
-        genome_depth = lines_set[9]
-        total_SNP = lines_set[12]
-        if donor_species2 not in donor_species_mut:
-            donor_species_mut.setdefault(donor_species2,[float(pan_genome_length)*float(genome_depth),float(total_SNP)])
-        else:
-            donor_species_mut[donor_species2][0] += float(pan_genome_length)*float(genome_depth)
-            donor_species_mut[donor_species2][1] += float(total_SNP)
-        donor_species_mut_list.append('%s\t%s\t%s\t%s\t\n'%(donor_species,pan_genome_length,genome_depth,total_SNP))
-    elif geneID!= 'gene_name':
-        total_SNP = lines_set[12]
-        donor_species_mut_gene.setdefault('%s_%s'%(lines_set[0],geneID),float(total_SNP))
+    geneID = lines_set[1]
+    donor_species = lines_set[0]
+    total_SNP = lines_set[5]
+    if not donor_species.startswith('allspecies'):
+        if donor_species == geneID:
+            donor_species2 = '_'.join(lines_set[0].split('_cluster')[0].split('_newcluster')[0].replace('_sp.','_sp').split('_')[1:])
+            pan_genome_length,genome_depth = donor_species_pan.get(donor_species,[1,0])
+            if donor_species2 not in donor_species_mut:
+                donor_species_mut.setdefault(donor_species2,[float(pan_genome_length)*float(genome_depth),
+                                                             float(total_SNP)])
+            else:
+                donor_species_mut[donor_species2][1] += float(total_SNP)
+            donor_species_mut_list.append('%s\t%s\t%s\t%s\t\n'%(donor_species,pan_genome_length,genome_depth,total_SNP))
+        elif lines_set[-1]=='True':
+            donor_species_set = donor_species.split('_')
+            donor_species3 = '%s_%s_%s' % (donor_species_set[0],
+                                          donor_species_set[1][0:min(6, len(donor_species_set[1]))],
+                                          donor_species_set[2][0:min(6, len(donor_species_set[2]))])
+            record_id = '%s__C_%s_G_%s' % (donor_species3,geneID.split('_')[1], geneID.split('_')[-1])
+            donor_species_mut_gene.setdefault(record_id,float(total_SNP))
 
-output_file = open(os.path.join(output_dir,'../all.mutation.sum'),'w')
-output_file.write('#donor_species\tpan_genome_length\tgenome_depth\ttotal_SNP\n'+''.join(donor_species_mut_list))
+output_file = open(os.path.join(mutation_dir,'all.mutation.sum'),'w')
+output_file.write('#donor_species\tpan_genome_length\tavg_pangenome_copy\ttotal_SNP\n'+''.join(donor_species_mut_list))
 output_file.close()
 
-# load cluster files
-Cluster = dict()
-for lines in open(cluster_uc,'r'):
-    lines_set = lines.split('\n')[0].split('\t')
-    if len(lines_set) > 11:
-        geneID = lines_set[-1].split('\n')[0]
-        geneID2 = lines_set[9]
-        Cluster.setdefault(geneID,set())
-        Cluster[geneID].add(geneID2)
-    else:
-        geneID = lines_set[9]
-        Cluster.setdefault(geneID, set())
+# load all genes
+Cluster = set()
+for lines in open(all_fasta,'r'):
+    if lines.startswith('>'):
+        lines_set = lines.split('\n')[0].split('\t')
+        geneID = '_'.join(lines_set[0].split('_')[-2:])
+        Cluster.add(geneID)
 
-# load mutation mapping
-mutation_mapping = dict()
-for lines in open(mutation_mapping_file,'r'):
-    lines_set = lines.split('\n')[0].split('\t')
-    geneID = '_'.join(lines_set[0].split('_')[-2:])
-    geneID2 = lines_set[1]
-    if geneID2 in donor_species_mut_gene:
-        mutation_mapping.setdefault(geneID, donor_species_mut_gene[geneID2])
-    else:
-        print(geneID2,'not in mutation list')
+# load enriched genes
+Enrichment = set()
+for lines in open(enrichment_file,'r'):
+    if lines.startswith('>'):
+        lines_set = lines.split('\n')[0].split('\t')
+        geneID = '_'.join(lines_set[0].split('_')[-2:])
+        if geneID not in Cluster:
+            print('wrong geneID not in cluster',geneID)
+        else:
+            Enrichment.add(geneID)
 
 # load annotation files
 Annotation = dict()
@@ -807,16 +822,15 @@ for lines in open(annotation_file,'r'):
             print('wrong line',lines_set)
             i+=1
 
-# load annotation files
-Enrichment = []
-for lines in open(enrichment_file,'r'):
-    if lines.startswith('>'):
-        lines_set = lines.split('\n')[0].split('\t')
-        geneID = '_'.join(lines_set[0].split('_')[-2:])
-        if geneID not in Cluster:
-            print('wrong geneID not in cluster',geneID)
-        else:
-            Enrichment.append(geneID)
+# load mutation mapping
+mutation_mapping = dict()
+for lines in open(mutation_mapping_file,'r'):
+    lines_set = lines.split('\n')[0].split('\t')
+    geneID = '_'.join(lines_set[0].split('_')[-2:])
+    geneID2 = lines_set[1]
+    mutation_mapping.setdefault(geneID, geneID2)
+    if geneID not in Annotation:
+        print('wrong geneID not in annotation %s'%(geneID))
 
 def annotate_gene(geneID,Annotation,donor_species_mut,Enriched_set,mutation_mapping,gene_SNP=0):
     species = ''
@@ -832,8 +846,9 @@ def annotate_gene(geneID,Annotation,donor_species_mut,Enriched_set,mutation_mapp
                 if species in allspecies:
                     pan_genome_length_depth, total_SNP = donor_species_mut[allspecies]
                     break
+        print(species,pan_genome_length_depth, total_SNP)
     if geneID in mutation_mapping:
-        gene_SNP = mutation_mapping[geneID]
+        gene_SNP = donor_species_mut_gene.get(mutation_mapping[geneID],0)
     if total_SNP > 0:
         Enriched_set[0] += gene_SNP/total_SNP
         Enriched_set[1] += gene_copy_length / pan_genome_length_depth
@@ -846,38 +861,30 @@ Not_enriched_list = []
 for geneID in Cluster:
     if geneID in Enrichment:
         if geneID in Annotation:
-            species, gene_copy_length, gene_SNP_geneID, pan_genome_length_depth, total_SNP = annotate_gene(geneID,Annotation,donor_species_mut,Enriched,mutation_mapping)
+            species, gene_copy_length, gene_SNP_geneID, pan_genome_length_depth, total_SNP = \
+                annotate_gene(geneID,Annotation,donor_species_mut,Enriched,mutation_mapping)
             Enriched_list.append('%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n' % (
                 geneID, geneID, species, gene_copy_length, gene_SNP_geneID, pan_genome_length_depth, total_SNP))
-        for geneID2 in Cluster[geneID]:
-            if geneID2 in Annotation:
-                species, gene_copy_length, gene_SNP, pan_genome_length_depth, total_SNP = annotate_gene(geneID, Annotation,
-                                                                                              donor_species_mut,Enriched,mutation_mapping,gene_SNP_geneID)
-                Enriched_list.append('%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n' % (
-                geneID, geneID2, species, gene_copy_length, gene_SNP_geneID, pan_genome_length_depth, total_SNP))
     else:
         if geneID in Annotation:
-            species, gene_copy_length, gene_SNP_geneID, pan_genome_length_depth, total_SNP = annotate_gene(geneID,Annotation,donor_species_mut,Not_enriched,mutation_mapping)
+            species, gene_copy_length, gene_SNP_geneID, pan_genome_length_depth, total_SNP = \
+                annotate_gene(geneID,Annotation,donor_species_mut,Not_enriched,mutation_mapping)
             Not_enriched_list.append('%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n' % (
                 geneID, geneID, species, gene_copy_length, gene_SNP_geneID, pan_genome_length_depth, total_SNP))
-        for geneID2 in Cluster[geneID]:
-            if geneID2 in Annotation:
-                species, gene_copy_length, gene_SNP, pan_genome_length_depth, total_SNP = annotate_gene(geneID, Annotation,
-                                                                                              donor_species_mut,Not_enriched,mutation_mapping,gene_SNP_geneID)
-                Not_enriched_list.append('%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n' % (
-                    geneID, geneID2, species, gene_copy_length, gene_SNP_geneID, pan_genome_length_depth, total_SNP))
 
-output_file = open(os.path.join(output_dir,'../all.mutation.enriched.sum'),'w')
+output_file = open(os.path.join(mutation_dir,'all.mutation.enriched.nonhuman.sum'),'w')
 output_file.write('#geneID\tgeneID2\tspecies\tgene_copy_length\tgene_SNP\tpan_genome_length_depth\ttotal_SNP\t\n'+''.join(Enriched_list))
 output_file.close()
 
-output_file = open(os.path.join(output_dir,'../all.mutation.notenriched.sum'),'w')
+output_file = open(os.path.join(mutation_dir,'all.mutation.notenriched.nonhuman.sum'),'w')
 output_file.write('#geneID\tgeneID2\tspecies\tgene_copy_length\tgene_SNP\tpan_genome_length_depth\ttotal_SNP\t\n'+''.join(Not_enriched_list))
 output_file.close()
 
-output_file = open(os.path.join(output_dir,'../all.mutation.enriched.ratio.sum'),'w')
-output_file.write('#enriched_SNP_ratio\tenriched_length_ratio\tnon_enriched_SNP_ratio\tnon_enriched_length_ratio\t\n'+
-                  '%s\t%s\t%s\t%s\t\n'%(Enriched[0],Enriched[1],Not_enriched[0],Not_enriched[1]))
+output_file = open(os.path.join(mutation_dir,'all.mutation.enriched.ratio.nonhuman.sum'),'w')
+output_file.write('#enriched_SNP_ratio\tenriched_length_ratio\tnon_enriched_SNP_ratio\tnon_enriched_length_ratio\tmutation_rate_enriched\tmutation_rate_nonenriched\tenriched_to_nonenriched\t\n'+
+                  '%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n'%(Enriched[0],Enriched[1],Not_enriched[0],Not_enriched[1],
+                                        Enriched[0]/Enriched[1],Not_enriched[0]/Not_enriched[1],
+                                        Enriched[0] / Enriched[1]/Not_enriched[0]* Not_enriched[1]))
 output_file.close()
 # clean up
 import os
