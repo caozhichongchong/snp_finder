@@ -417,10 +417,10 @@ except IOError:
     pass
 
 # set up cutoff
-#total_coverage_cutoff = 0.7 #70% reads align to the ref genome
-total_coverage_cutoff = 0.6
+total_coverage_cutoff = 0.7 #70% reads align to the ref genome
+#total_coverage_cutoff = 0.6
 genome_avg_coverage_cutoff = 10
-
+cluster_cutoff = 6 # minimum genome number as a clonal population
 
 Donor_species = dict()
 Coverage = []
@@ -494,7 +494,7 @@ for donor_species in Donor_species:
         donor_species,
         Donor_species[donor_species][1],
         total_non_qualified))
-    if total_non_qualified >= 6:
+    if total_non_qualified >= cluster_cutoff:
         # new cluster
         new_cluster_file = '%s/%s_newcluster%s' %(genome_dir,donor_species,newcluster+1)
         try:
@@ -1265,7 +1265,6 @@ for folder in genome_dir:
             f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmd)))
             f1.close()
 
-
 f1 = open(os.path.join(input_script, 'allspades.sh'), 'w')
 f1.write('#!/bin/bash\nsource ~/.bashrc\n')
 for sub_scripts in glob.glob(os.path.join(input_script_sub, '*.sh')):
@@ -1318,7 +1317,7 @@ for fasta_all_file in fasta_all:
         fasta_all_file.replace(fasta_name,fasta_name.replace('.fasta','.faa')),
         fasta_all_file.replace(fasta_name, fasta_name.replace('.fasta', '.fna')),
         fasta_all_file)
-    cmdsprokka += 'py37\nprokka --kingdom Bacteria --outdir %s/prokka_%s --genus Bacteroides --locustag Bacter %s\n' %\
+    cmdsprokka += 'py37\nprokka --kingdom Bacteria --outdir %s/prokka_%s  --locustag Bacter %s\n' %\
                   (fasta_folder, donor_species,fasta_all_file)
     cmdsprokka += 'mv %s/prokka_%s/*.gff %s/%s.all.gff\n' %(fasta_folder,donor_species, fasta_folder,donor_species)
     cmdsprokka += 'mv %s/prokka_%s/*.tsv %s/%s.all.tsv\n' % (fasta_folder, donor_species, fasta_folder, donor_species)
@@ -2222,7 +2221,7 @@ Poor_MLF_freq_cutoff = (1 - SNP_presence_cutoff2)*0.75 #the unqualifie samples s
 SNP_total_cutoff_2 = 50
 cluster_cutoff = 2
 # coverage cutoff Step 1
-total_coverage_cutoff = 0.6
+total_coverage_cutoff = 0.7
 genome_avg_coverage_cutoff = 10
 
 # Set up A T G C
@@ -3166,7 +3165,7 @@ def extract_donor_species(donor_species,input_fasta,gene_name_list,output_fasta)
 
 def annotation(all_filter_gene_fasta_file):
     # run prokka
-    cmdsprokka = 'py37\nprokka --kingdom Bacteria --outdir %s/prokka_%s --genus Bacteroides --protein %s --locustag Bacter %s/%s\n' % \
+    cmdsprokka = 'py37\nprokka --kingdom Bacteria --outdir %s/prokka_%s  --protein %s --locustag Bacter %s/%s\n' % \
                  (output_dir_merge + '/summary', os.path.split(all_filter_gene_fasta_file)[-1],
                   all_filter_gene_fasta_file,
                   output_dir_merge + '/summary',
@@ -3598,7 +3597,7 @@ def extract_donor_species(donor_species,input_fasta,gene_name_list,output_fasta)
 
 def annotation(all_filter_gene_fasta_file):
     # run prokka
-    cmdsprokka = 'py37\nprokka --kingdom Bacteria --outdir %s/prokka_%s --genus Bacteroides --protein %s --locustag Bacter %s/%s\n' % \
+    cmdsprokka = 'py37\nprokka --kingdom Bacteria --outdir %s/prokka_%s  --protein %s --locustag Bacter %s/%s\n' % \
                  (output_dir_merge + '/summary', os.path.split(all_filter_gene_fasta_file)[-1],
                   all_filter_gene_fasta_file,
                   output_dir_merge + '/summary',
@@ -4570,7 +4569,7 @@ for species in species_set:
             databasename.replace(fasta_name, fasta_name.replace('.fasta', '.fna')),
             databasename)
         # prokka not used
-        cmd += '#prokka --kingdom Bacteria --outdir %s/prokka_%s --genus Bacteroides --locustag Bacter %s\n' % \
+        cmd += '#prokka --kingdom Bacteria --outdir %s/prokka_%s  --locustag Bacter %s\n' % \
                       (ref_folder, species, databasename)
         cmd += '#mv %s/prokka_%s/*.gff %s/%s.all.gff\n' % (
             ref_folder, species, ref_folder, species)
@@ -5163,7 +5162,7 @@ SNP_depth_cutoff2 = 5 # both forward and reverse reads cutoff for SNP ALTs in a 
 SNP_total_cutoff_2 = 50
 cluster_cutoff = 2
 # coverage cutoff Step 1
-total_coverage_cutoff = 0.6
+total_coverage_cutoff = 0.7
 genome_avg_coverage_cutoff = 10
 
 # Set up A T G C
@@ -5846,61 +5845,63 @@ for folder in genome_dir:
                 os.system('minimap2 -d %s.mmi %s \n' % (database, database))
             for files in allfastq:
                 donor_species_dir_file = os.path.split(files)[-1]
-                print(donor_species_dir_file)
-                tempbamoutput = os.path.join(output_dir + '/bwa/0', donor_species_dir_file)
-                try:
-                    f1 = open(tempbamoutput + '.sorted.bam')
-                except IOError:
-                    files2 = files.replace(fastq_name, fastq_name.replace('1', '2'))
-                    if 'fasta' in fastq_name:
-                        cmds += '#bowtie2' + ' -X 2000 --no-mixed --very-sensitive --n-ceil 0,0.01 --threads %s --un-conc %s.unaligned -x %s -f -1 %s -2 %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
-                            min(40, 40), tempbamoutput, database, files, files2, 'samtools', min(40, 40),
-                            tempbamoutput, 'samtools', min(40, 40), tempbamoutput, tempbamoutput, 'samtools', min(40, 40),
-                            tempbamoutput)
-                        cmds += 'minimap2' + ' -ax sr -N 1000 -p 0.8 -t %s %s.mmi %s %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
-                            min(40, 40), database, files, files2, 'samtools', min(40, 40),
-                            tempbamoutput, 'samtools', min(40, 40), tempbamoutput, tempbamoutput, 'samtools',
-                            min(40, 40),
-                            tempbamoutput)
-                    else:
-                        cmds += '#bowtie2' + ' -X 2000 --no-mixed --very-sensitive --n-ceil 0,0.01 --threads %s --un-conc %s.unaligned -x %s -1 %s -2 %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
-                            min(40, 40), tempbamoutput, database, files, files2, 'samtools', min(40, 40),
-                            tempbamoutput, 'samtools', min(40, 40), tempbamoutput, tempbamoutput, 'samtools',
-                            min(40, 40),
-                            tempbamoutput)
-                        cmds += 'minimap2' + ' -ax sr -N 1000 -p 0.8 -t %s %s.mmi %s %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
-                            min(40, 40), database, files, files2, 'samtools', min(40, 40),
-                            tempbamoutput, 'samtools', min(40, 40), tempbamoutput, tempbamoutput, 'samtools',
-                            min(40, 40),
-                            tempbamoutput)
-                    sub_samples.append(tempbamoutput + '.sorted.bam')
-                    cmds += '#rm -rf %s.*.unaligned\n' % (tempbamoutput)
-                    i += 1
-                    if i % 25 == 0:
-                        f1 = open(os.path.join(input_script_sub, '%s.%s.vcf.sh' % (donor_species, int(i / 25))), 'a')
-                        f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
-                        f1.close()
-                        cmds = ''
+                if donor_species_dir_file.startswith('am'):
+                    print(donor_species_dir_file)
+                    tempbamoutput = os.path.join(output_dir + '/bwa/0', donor_species_dir_file + '.' + donor_species)
+                    try:
+                        f1 = open(tempbamoutput + '.sorted.bam')
+                    except IOError:
+                        files2 = files.replace(fastq_name, fastq_name.replace('1', '2'))
+                        if 'fasta' in fastq_name:
+                            #cmds += 'bowtie2' + ' -X 2000 --no-mixed --very-sensitive --n-ceil 0,0.01 --threads %s --un-conc %s.unaligned -x %s -f -1 %s -2 %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
+                            #    min(40, 40), tempbamoutput, database, files, files2, 'samtools', min(40, 40),
+                            #    tempbamoutput, 'samtools', min(40, 40), tempbamoutput, tempbamoutput, 'samtools', min(40, 40),
+                            #    tempbamoutput)
+                            cmds += 'minimap2' + ' -ax sr -N 1000 -p 0.8 -t %s %s.mmi %s %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
+                                min(40, 40), database, files, files2, 'samtools', min(40, 40),
+                                tempbamoutput, 'samtools', min(40, 40), tempbamoutput, tempbamoutput, 'samtools',
+                                min(40, 40),
+                                tempbamoutput)
+                        else:
+                            #cmds += 'bowtie2' + ' -X 2000 --no-mixed --very-sensitive --n-ceil 0,0.01 --threads %s --un-conc %s.unaligned -x %s -1 %s -2 %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
+                            #    min(40, 40), tempbamoutput, database, files, files2, 'samtools', min(40, 40),
+                            #    tempbamoutput, 'samtools', min(40, 40), tempbamoutput, tempbamoutput, 'samtools',
+                            #    min(40, 40),
+                            #    tempbamoutput)
+                            cmds += 'minimap2' + ' -ax sr -N 1000 -p 0.8 -t %s %s.mmi %s %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
+                                min(40, 40), database, files, files2, 'samtools', min(40, 40),
+                                tempbamoutput, 'samtools', min(40, 40), tempbamoutput, tempbamoutput, 'samtools',
+                                min(40, 40),
+                                tempbamoutput)
+                        cmds += 'rm -rf %s.bam\n' % (tempbamoutput)
+                        sub_samples.append(tempbamoutput + '.sorted.bam')
+                        cmds += '#rm -rf %s.*.unaligned\n' % (tempbamoutput)
+                        i += 1
+                        if i % 25 == 0:
+                            f1 = open(os.path.join(input_script_sub, '%s.%s.vcf.sh' % (donor_species, int(i / 25))), 'a')
+                            f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
+                            f1.close()
+                            cmds = ''
             f1 = open(os.path.join(input_script_sub, '%s.%s.vcf.sh' % (donor_species, int(i / 25))), 'a')
             f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
             f1.close()
             # mileup
-            cmd = ''
+            cmds = ''
             tempbamoutput = os.path.join(output_dir + '/merge', donor_species + '.all')
             try:
                 f1 = open(tempbamoutput + '.sorted.bam')
             except IOError:
                 if sub_samples != []:
-                    cmd += '%s mpileup --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -q30 -B -Ou -d3000 -f %s %s  | %s call --ploidy 1 --threads %s -m > %s.raw.vcf\n' % (
+                    cmds += '%s mpileup --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -q30 -B -Ou -d3000 -f %s %s  | %s call --ploidy 1 --threads %s -m > %s.raw.vcf\n' % (
                         'bcftools', min(40, 40), database,
                         ' '.join(sub_samples), 'bcftools', min(40, 40), tempbamoutput)
-                    cmd += '%s filter --threads %s -s LowQual %s.raw.vcf > %s.flt.vcf \n' % (
+                    cmds += '%s filter --threads %s -s LowQual %s.raw.vcf > %s.flt.vcf \n' % (
                         'bcftools', min(40, 40), tempbamoutput, tempbamoutput)
-                    cmd += '%s view -H -v snps %s.flt.vcf > %s.flt.snp.vcf \n' % (
+                    cmds += '%s view -H -v snps %s.flt.vcf > %s.flt.snp.vcf \n' % (
                         'bcftools', tempbamoutput, tempbamoutput)
-                    cmd += 'rm -rf %s.flt.vcf\n' % (tempbamoutput)
+                    cmds += 'rm -rf %s.flt.vcf\n' % (tempbamoutput)
             f1 = open(os.path.join(input_script_merge, '%s.sh' % donor_species), 'w')
-            f1.write('%s' % (''.join(cmd)))
+            f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
             f1.close()
 
 
@@ -5917,6 +5918,13 @@ for sub_scripts in glob.glob(os.path.join(input_script_merge, '*.sh')):
     f1.write('jobmit %s %s\n' % (sub_scripts, os.path.split(sub_scripts)[-1]))
 
 f1.close()
+
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# clean up
+import os
+os.system('#rm -rf /scratch/users/anniz44/genomes/donor_species/selected_species/MG_vcf/bwa')
+
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
 
@@ -5925,180 +5933,471 @@ import glob
 import os
 from Bio import SeqIO
 from Bio.Seq import Seq
-from datetime import datetime
 import statistics
 
-genome_dir = '/scratch/users/anniz44/genomes/donor_species'
-metagenome_summary = '/scratch/users/anniz44/Metagenomes/donor_species/summary_BN10'
-#metagenome_summary = '/scratch/users/anniz44/Metagenomes/donor_species_test/summary'
-metagenome_snp = '/scratch/users/anniz44/Metagenomes/donor_species/bwa/0'
-output_dir_snps = '/scratch/users/anniz44/genomes/donor_species/filtering_SNPs'
+# setup path all clonal population
+input_script_split_sub = '/scratch/users/anniz44/scripts/1MG/donor_species/MG/vcf'
+input_script_merge_sub = '/scratch/users/anniz44/scripts/1MG/donor_species/MG/vcf_merge'
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/MG'
+input_script_sub = '/scratch/users/anniz44/scripts/1MG/donor_species/MG/tree'
+genome_dir = glob.glob('/scratch/users/anniz44/genomes/donor_species/selected_species/*')
+genome_root = '/scratch/users/anniz44/genomes/donor_species/selected_species/'
+ref_merge_vcf_dir = '/scratch/users/anniz44/genomes/donor_species/selected_species/vcf_merge_round2/bwa/0'
+ref_merge_vcf_dir2 = '/scratch/users/anniz44/genomes/donor_species/species/vcf_merge_round2/bwa/0'
+output_dir = '/scratch/users/anniz44/genomes/donor_species/selected_species/MG'
+output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/selected_species/MG_vcf'
+fastq_name = '_1.fasta'
+lose_set = ['am_Bacteroides_fragilis']
+cluster_set = {}
+################################################### Set up ########################################################
+try:
+    os.mkdir(output_dir + '/merge/tree')
+except IOError:
+    pass
 
-Wanted = []
-Gene_info = dict()
-Gene_pos = dict()
-for lines in open(output_dir_snps + '/summary/all.gene.list.filtered.loci.txt'):
-    gene_ID = lines.split('\t')[1]
-    Wanted.append(gene_ID)
-    # gene ID, POS, REF, ALT, N or S
-    Gene_pos.setdefault(gene_ID,[])
-    pos = lines.split('\t')[2]
-    Gene_pos[gene_ID].append(pos)
-    # donor_species, REF ALT N_or_S
-    Gene_info.setdefault('%s_%s'%(gene_ID,pos),[lines.split('\t')[0],lines.split('\t')[3],lines.split('\t')[4],lines.split('\t')[5].split('\n')[0]])
+try:
+    os.mkdir(input_script_sub)
+except IOError:
+    pass
 
-Wanted.append ('all')
-
-Cluster_fun = dict()
-for lines in open(output_dir_snps + '/fasta/cluster.gene.function.select.txt'):
-    gene_ID = lines.split('\t')[1]
-    Cluster_fun.setdefault(gene_ID,lines)
-
-# filter metagenomes results
-all_snp_sum = glob.glob(os.path.join(metagenome_snp,'*.raw.vcf'))
-# non_fixed_ALT, non_fixed_REF, non_fixed_ALT_other
-def ALT_freq_mut_type(REF,ALT,Other,Total):
-    MAX = max(REF, ALT, Other)
-    if REF == MAX:
-        return 'REF'
-    elif ALT == MAX:
-        return 'ALT'
-    elif Other == MAX:
-        return 'Other'
-
+# set up cutoff
+Sample_depth_cutoff = 2  # both forward and reverse reads cutoff in a sample
+MLF_cutoff = 0.1 # minimum MLF cutoff
+MLF_variant_cutoff = 0.1 # maximum variance of MLF to be grouped as one genome seq
+SNP_cluster_cutoff = 10 # maximum SNP cutoff to be a cluster
+top_relative = 50 # maximum nest to cluster
+uniq_seq_count_cutoff = 4 # minimum presence of a seq and its downstream relatives to output
+# Set up A T G C
+Allels = dict()
+Allels['A']=0
+Allels['T']=1
+Allels['G']=2
+Allels['C']=3
 Allels_order = ['A','T','G','C']
-def ALT_freq_frq(Allels_count, REF_genome, ALT_genome):
-    REF_metagenome = [REF_genome,0]
-    ALT_metagneome = [ALT_genome,0]
-    Other_metagenome = ['',0]
-    total_count = 0
+
+################################################### Function ########################################################
+# set up functions
+def ALT_freq(Allels_count):
+    Major_ALT = []
+    Minor_ALT = []
+    ALT_set = dict()
+    ALT_frq_set = set()
     for alleles in range(0, 4):
         ALT_frq = int(Allels_count[alleles])
-        ALT = Allels_order[alleles]
-        total_count += ALT_frq
-        if ALT_frq > 1:
-            # remove only 1 read mapping to the snps
-            if ALT == REF_genome:
-                REF_metagenome[1] = ALT_frq
-            elif ALT == ALT_genome:
-                ALT_metagneome[1] = ALT_frq
+        ALT_set.setdefault(ALT_frq, set())
+        ALT_set[ALT_frq].add(alleles)
+        ALT_frq_set.add(ALT_frq)
+    ALT_frq_set = sorted(ALT_frq_set,reverse=True)
+    for ALT_frq in ALT_frq_set:
+        for alleles in ALT_set[ALT_frq]:
+            if Major_ALT == []:
+                Major_ALT = [Allels_order[alleles],ALT_frq]
             else:
-                Other_metagenome[0] += ALT
-                Other_metagenome[1] += ALT_frq
-    total_ALT_frq = ALT_metagneome[1] + Other_metagenome[1]
-    if total_ALT_frq == 0:
-        return '%s\t%s\t\t\t\t\tno_mutation\t' %(REF_genome,REF_metagenome[1]/total_count)
-    else:
-        mutation_type = ALT_freq_mut_type(REF_metagenome[1],ALT_metagneome[1],Other_metagenome[1],total_count)
-        return '%s\t%s\t%s\t%s\t%s\t%s\t%s\t' % (REF_genome,REF_metagenome[1]/total_count,
-                                             ALT_genome,ALT_metagneome[1]/total_count,
-                                             Other_metagenome[0],Other_metagenome[1]/total_count,mutation_type)
+                Minor_ALT.append([Allels_order[alleles],ALT_frq])
+    return [Major_ALT,Minor_ALT]
 
-def ALT_freq(REF_meta,ALT_meta,Subdepth_set,REF_genome, ALT_genome):
-    REF_metagenome = [REF_genome,0]
-    ALT_metagneome = [ALT_genome,0]
-    Other_metagenome = ['',0]
-    total_count = 0
-    i = 0
-    for alleles in [REF_meta] + ALT_meta:
-        if alleles != '.':
-            depth_allele = int(Subdepth_set[i])
-            if depth_allele > 1:
-                # remove only 1 read mapping to the snps
-                total_count += depth_allele
-                if alleles == REF_genome:
-                    REF_metagenome[1] = depth_allele
-                elif alleles == ALT_genome:
-                    ALT_metagneome[1] = depth_allele
+def curate_REF(allels_set,Depth4):
+    Subdepth = Depth4.split(':')[-1].replace('\n', '').split(',')
+    Subdepth_REF = int(Subdepth[0]) + int(Subdepth[1])
+    Subdepth_ALT = int(Subdepth[2]) + int(Subdepth[3])
+    if Subdepth_REF <= Subdepth_ALT:
+        return allels_set[1]
+    else:
+        return allels_set[0]
+
+def create_SNP_seq(total_length):
+    return 'N'*total_length
+
+def change_SNP_seq(Sample_alignment_seq,subname,ALT,SNP_pos):
+    Seq = Sample_alignment_seq[subname]
+    Sample_alignment_seq[subname] = Seq[:SNP_pos] + ALT + Seq[SNP_pos + 1:]
+
+def add_SNP_seq(genomename,ALT,MLF,SNP_pos,Main = True):
+    if MLF > MLF_cutoff:
+        Set = False
+        if Main == True:
+            # major alt stores as genomename.1
+            change_SNP_seq(Sample_alignment_seq,genomename + '.1', ALT, SNP_pos)
+            Sample_alignment_freq[genomename + '.1'].append(MLF)
+        else:
+            # minor alt stores as genomename.i
+            for genome_sub in Sample_alignment[genomename]:
+                MLF_genome = statistics.mean(Sample_alignment_freq[genome_sub])
+                if MLF <= MLF_variant_cutoff +  MLF_genome and MLF >= MLF_genome - MLF_variant_cutoff:
+                    # find the right sub genome sub
+                    Sample_alignment_freq[genome_sub].append(MLF)
+                    change_SNP_seq(Sample_alignment_seq, genome_sub, ALT, SNP_pos)
+                    Set = True
+                    break
+            if Set == False:
+                # the right sub genome sub not found
+                # create another genome sub
+                i = int(Sample_alignment[genomename][-1].split('.')[-1])
+                newsubname = genomename + '.%s'%(i + 1)
+                Sample_alignment[genomename].append(newsubname)
+                Sample_alignment_seq.setdefault(newsubname, Sample_alignment_seq[genomename + '.1'])
+                change_SNP_seq(Sample_alignment_seq,newsubname, ALT, SNP_pos)
+                Sample_alignment_freq.setdefault(newsubname, [MLF])
+
+def SNP_check_all(lines_set,SNP_pos):
+    REF = lines_set[3]
+    allels_set = [REF]
+    if '.' not in lines_set[4]:
+        allels_set += lines_set[4].split(',')
+        Total_alleles = len(allels_set)
+        genome_order = 0
+        Depth4 = lines_set[7].split('DP4=')[1].split(';')[0]
+        REF = curate_REF(allels_set, Depth4)
+        for Subdepth_all in lines_set[9:]:
+            genomename = Sample_name[genome_order]
+            genome_order += 1
+            Allels_frq = [0, 0, 0, 0]
+            Allels_frq_sub = [0, 0, 0, 0, 0, 0, 0, 0]
+            Subdepth = Subdepth_all.split(':')[-1].replace('\n', '').split(',')
+            total_sub_depth = 0
+            Subdepth_forward = Subdepth_all.split(':')[-3].split(',')
+            Subdepth_reverse = Subdepth_all.split(':')[-2].split(',')
+            for num_allels in range(0, Total_alleles):
+                allels = allels_set[num_allels]
+                Subdepth_alleles = int(Subdepth[num_allels])
+                if allels in Allels:
+                    forward_alt = int(Subdepth_forward[num_allels])
+                    reverse_alt = int(Subdepth_reverse[num_allels])
+                    if forward_alt >= Sample_depth_cutoff and \
+                            reverse_alt >= Sample_depth_cutoff:
+                        # forward and reverse depth cutoff to call
+                        Allels_frq[Allels[allels]] += Subdepth_alleles
+                        total_sub_depth += Subdepth_alleles
+                        Allels_frq_sub[Allels[allels] * 2] += int(Subdepth_forward[num_allels])
+                        Allels_frq_sub[Allels[allels] * 2 + 1] += int(Subdepth_reverse[num_allels])
                 else:
-                    Other_metagenome[0] += alleles
-                    Other_metagenome[1] += depth_allele
-        i+=1
-    total_ALT_frq = ALT_metagneome[1] + Other_metagenome[1]
-    if total_count == 0:
-        return ''
-    elif total_ALT_frq == 0:
-        return '%s\t%s\t\t\t\t\tno_mutation\t%s\t' %(REF_genome,REF_metagenome[1]/total_count,total_count)
-    else:
-        mutation_type = ALT_freq_mut_type(REF_metagenome[1],ALT_metagneome[1],Other_metagenome[1],total_count)
-        return '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t' % (REF_genome,REF_metagenome[1]/total_count,
-                                             ALT_genome,ALT_metagneome[1]/total_count,
-                                             Other_metagenome[0],Other_metagenome[1]/total_count,mutation_type,total_count)
+                    pass
+            # find major alt and calculate frequency
+            Major_ALT, Minor_ALT = ALT_freq(Allels_frq)
+            # change to major ALT
+            for genome_sub in Sample_alignment[genomename]:
+                change_SNP_seq(Sample_alignment_seq, genome_sub, REF, SNP_pos)
+            if total_sub_depth > 0:
+                add_SNP_seq(genomename, Major_ALT[0], Major_ALT[1] / total_sub_depth, SNP_pos)
+                if Minor_ALT!= []:
+                    for sub_alt in Minor_ALT:
+                        ALT, ALT_MLF = sub_alt
+                        add_SNP_seq(genomename, ALT, ALT_MLF / total_sub_depth, SNP_pos, False)
 
-all_output_select = []
-all_output_select.append(
-        '#donor_species\tmetagenome\tdonor\ttime\tN_or_S\tREF_genome\tREF_frq\tALT_genome\tALT_frq\tOther_ALT\tOther_ALT_frq\tmutation_type_norm\ttotal_count\tCHR\tPOS\n')
-
-output_select_file = open(os.path.join(metagenome_summary,'all.filtered.selected.frq.snp'),'w')
-output_select_file.write(''.join(all_output_select))
-output_select_file.close()
-all_output_select = []
-i = 0
-Mut_gene = dict()
-for files in all_snp_sum:
-    files_dir, file_name = os.path.split(files)
-    print(file_name)
-    i += 1
-    if i%20 == 0:
-        print('%s output results for %s samples' % (datetime.now(), i))
-        output_select_file = open(os.path.join(metagenome_summary, 'all.filtered.selected.frq.snp'), 'a')
-        output_select_file.write(''.join(all_output_select))
-        output_select_file.close()
-        all_output_select = []
-    for lines in open(files,'r'):
-        if not lines.startswith('#'):
+def load_ref_vcf(ref_vcf_file):
+    ref_chr = dict()
+    ref_chr_order = dict()
+    i = 0
+    total_length = 0
+    for files in ref_vcf_file:
+        Set_length = False
+        for lines in open(files,'r'):
             lines_set = lines.split('\n')[0].split('\t')
-            gene_ID = lines_set[0]
-            pos = lines_set[1]
-            if gene_ID in Gene_pos and pos in Gene_pos.get(gene_ID,[]):
-                    #print('%s find a qualified gene in sample %s' % (datetime.now(), file_name))
-                    donor_species, REF, ALT, N_or_S = Gene_info['%s_%s'%(gene_ID,pos)]
-                    Subdepth = lines_set[9].split(':')[-1].replace('\n', '')
-                    Subdepth_set = Subdepth.split(',')
-                    REF_meta = lines_set[3]
-                    ALT_meta = lines_set[4].split(',')
-                    temp_result = ALT_freq(REF_meta,ALT_meta,Subdepth_set,REF,ALT)
-                    #print('%s finishe processing gene %s' % (datetime.now(), gene_ID))
-                    if temp_result!= '':
-                        donor = file_name[0:2]
-                        temp_line = '%s\t%s\t%s\t%s\t%s\t'%(donor_species,file_name.split('.raw.vcf')[0],donor,file_name[2:6],N_or_S)+ temp_result + '\t'.join(lines_set[0:2])
-                        all_output_select.append(temp_line)
-                        if 'no_mutation' not in temp_result:
-                            Mut_gene.setdefault(donor,set())
-                            Mut_gene[donor].add('%s_%s'%(gene_ID,pos))
+            CHR, POS, Notused, REF, ALT = lines_set[0:5]
+            CHR_POS = '%s__%s'%(CHR, POS)
+            ref_chr.setdefault(CHR_POS,[])
+            ref_chr[CHR_POS]=[REF,ALT]
+            ref_chr_order.setdefault(CHR_POS,i)
+            i += 1
+        fasta_file = '.'.join(files.split('.')[:-1])+'.fasta'
+        for record in SeqIO.parse(fasta_file, 'fasta'):
+            record_name = str(record.id)
+            if not Set_length:
+                total_length += len(str(record.seq))
+                Set_length = True
+    return [ref_chr,ref_chr_order,total_length]
 
-output_select_file = open(os.path.join(metagenome_summary, 'all.filtered.selected.frq.snp'), 'a')
-output_select_file.write(''.join(all_output_select))
-output_select_file.close()
+def outputtree(uniq_seq):
+    SNP_alignment_output = []
+    SNP_alignment_output_parsi = []
+    seq_num = 0
+    seq_len_max = 0
+    for genomename in Sample_alignment_seq:
+        seq_len = len(Sample_alignment_seq[genomename])
+        if seq_len > 0:
+            SNP_alignment_output.append('>%s\n%s\n' % (genomename, Sample_alignment_seq[genomename]))
+            SNP_alignment_output_parsi.append('%s    %s\n' % (genomename[-9:], Sample_alignment_seq[genomename]))
+            seq_num += 1
+            seq_len_max = max(seq_len_max,seq_len)
+    temp_line = ('   %s   %s\n' % (seq_num, seq_len_max))
+    vcf_file_filtered = open(vcf_file + '.fasta', 'w')
+    vcf_file_filtered.write(''.join(SNP_alignment_output))
+    vcf_file_filtered.close()
+    vcf_file_filtered = open(vcf_file + '.parsi.fasta', 'w')
+    vcf_file_filtered.write(temp_line + ''.join(SNP_alignment_output_parsi))
+    vcf_file_filtered.close()
+    SNP_alignment_output = []
+    SNP_alignment_output_parsi = []
+    seq_num = 0
+    seq_len_max = 0
+    for genomename in uniq_seq:
+        seq_len = len(uniq_seq[genomename])
+        if seq_len > 0:
+            SNP_alignment_output.append('>%s\n%s\n' % (genomename, uniq_seq[genomename]))
+            SNP_alignment_output_parsi.append('%s    %s\n' % (genomename[-9:], uniq_seq[genomename]))
+            seq_num += 1
+            seq_len_max = max(seq_len_max, seq_len)
+    temp_line = ('   %s   %s\n' % (seq_num, seq_len_max))
+    vcf_file_filtered = open(vcf_file + '.uniq.fasta', 'w')
+    vcf_file_filtered.write(''.join(SNP_alignment_output))
+    vcf_file_filtered.close()
+    vcf_file_filtered = open(vcf_file + '.uniq.parsi.fasta', 'w')
+    vcf_file_filtered.write(temp_line + ''.join(SNP_alignment_output_parsi))
+    vcf_file_filtered.close()
 
-all_output_select = []
-all_output_select.append(
-        '#donor_species\tmetagenome\tdonor\ttime\tN_or_S\tREF_genome\tREF_frq\tALT_genome\tALT_frq\tOther_ALT\tOther_ALT_frq\tmutation_type_norm\ttotal_count\tCHR\tPOS\n')
+def SNP_seq(seq1, seq2, total_length):
+    SNP_total = 0
+    for i in range(0, total_length):
+        if seq1[i] != seq2[i]:
+            # a SNP
+            SNP_total += 1
+    return SNP_total
 
-for lines in open(os.path.join(metagenome_summary, 'all.filtered.selected.frq.snp'), 'r'):
-    if not lines.startswith('#'):
-        lines_set = lines.split('\n')[0].split('\t')
-        gene_ID = lines_set[12]
-        pos = lines_set[13]
-        donor = lines_set[2]
-        if '%s_%s'%(gene_ID,pos) in Mut_gene.get(donor,[]):
-            all_output_select.append(lines)
+def find_close_relative(seq,uniq_seq,uniq_ID):
+    SNP_set = dict()
+    # look for closest relative from the closest timepoint
+    allsample_order = sorted(uniq_seq,reverse=True)
+    for samplenamesub in allsample_order:
+        if samplenamesub != uniq_ID:
+            meta_seq = uniq_seq[samplenamesub]
+            SNP_total = SNP_seq(seq, meta_seq, total_length)
+            SNP_set.setdefault(SNP_total,samplenamesub)
+    SNP_set2 = sorted(SNP_set)
+    print(SNP_set2,SNP_set)
+    return [SNP_set2[0],SNP_set[SNP_set2[0]]]
 
-output_select_file = open(os.path.join(metagenome_summary, 'all.filtered.selected.frq.snp.snp.only'), 'w')
-output_select_file.write(''.join(all_output_select))
-output_select_file.close()
+def find_close_3_relative(close_relative_set,uniq_seq_count,pre_result,top_relative = 3):
+    temp_result = close_relative_set.get(pre_result[1], [])
+    closest_relative_ID = pre_result[1]
+    if 'First' in closest_relative_ID:
+        closest_relative_ID = find_first_uniqID(close_relative_set, closest_relative_ID)
+    uniq_seq_count[closest_relative_ID] += 1
+    print(temp_result,top_relative,pre_result)
+    if pre_result[1] in cluster_set.get(donor_species,[]):
+        # a pre set cluster
+        return pre_result
+    if temp_result != [] and top_relative > 0 and temp_result[0] <= SNP_cluster_cutoff:
+        top_relative -= 1
+        pre_result = find_close_3_relative(close_relative_set, uniq_seq_count, temp_result, top_relative)
+    return pre_result
 
-# fix genome name
-output = []
-for lines in open('SNP_round1.allcompare.allpair.sum','r'):
-    lines_set = lines.split('\t')
-    for item in lines_set:
-        if '_g' in item:
-            newitem ='_'.join(item.split('_g')[:-1])+'_g'+'%.4d'%( int(item.split('_g')[-1]))
-            lines_set[lines_set.index(item)]=newitem
-    output.append('\t'.join(lines_set))
+def find_first_uniqID(close_relative_set,closest_relative):
+    for uniqID in close_relative_set:
+        if close_relative_set[uniqID][1] == closest_relative:
+            return uniqID
 
-f1=open('SNP_round1.allcompare.allpair.sum','w')
-f1.write('G1\tG2\tSNP\t\n'+''.join(output))
+def outputfreq():
+    timepoint = sorted(Sample_alignment_seq)
+    cluster = True
+    meta_seq_uniq = dict()
+    uniq_seq = dict()
+    # calculate uniq seq number
+    for samplenamesub in timepoint:
+        if Sample_alignment_freq[samplenamesub] != []:
+            # not empty mapping
+            meta_seq = Sample_alignment_seq[samplenamesub]
+            SNP_short, closest_relative = [0, 'First']
+            # uniq seq
+            if meta_seq not in meta_seq_uniq:
+                meta_seq_uniq.setdefault(meta_seq, [])
+                uniq_seq.setdefault(samplenamesub, meta_seq)
+    if len(uniq_seq) <= 10:
+        cluster = False
+    meta_seq_uniq = dict()
+    uniq_seq = dict()
+    output_freq = []
+    close_relative_set = dict()
+    close_relative_set_output = dict()
+    uniq_seq_count = dict()
+    # unique meta seq
+    for samplenamesub in timepoint:
+        if Sample_alignment_freq[samplenamesub] != []:
+            # not empty mapping
+            meta_seq = Sample_alignment_seq[samplenamesub]
+            SNP_short, closest_relative = [0,'First']
+            # uniq seq
+            if meta_seq not in meta_seq_uniq:
+                meta_seq_uniq.setdefault(meta_seq, [])
+                uniq_seq.setdefault(samplenamesub,meta_seq)
+                uniq_seq_count.setdefault(samplenamesub, 0)
+            meta_seq_uniq[meta_seq].append(samplenamesub)
+            uniq_ID = meta_seq_uniq[meta_seq][0]
+            uniq_seq_count[uniq_ID] += 1
+            if len(uniq_seq) == 1:
+                # set up the first timepoint
+                close_relative_set.setdefault(uniq_ID, [SNP_short,closest_relative])
+                close_relative_set_output.setdefault(uniq_ID, [SNP_short, closest_relative])
+                uniq_ID_secondstrain = uniq_ID.replace('.1', '.2')
+                if uniq_ID_secondstrain in timepoint:
+                    close_relative_set.setdefault(uniq_ID_secondstrain, [0, 'First2'])
+                    close_relative_set_output.setdefault(uniq_ID_secondstrain, [0, 'First2'])
+                uniq_ID_secondstrain = uniq_ID.replace('.1', '.3')
+                if uniq_ID_secondstrain in timepoint:
+                    close_relative_set.setdefault(uniq_ID_secondstrain, [0, 'First3'])
+                    close_relative_set_output.setdefault(uniq_ID_secondstrain, [0, 'First3'])
+            # find closest relative
+            if uniq_ID not in close_relative_set:
+                SNP_short, closest_relative = find_close_relative(meta_seq, uniq_seq,uniq_ID)
+                close_relative_set.setdefault(uniq_ID, [SNP_short, closest_relative])
+                if cluster:
+                    SNP_short, closest_relative = find_close_3_relative(close_relative_set, uniq_seq_count,[SNP_short, closest_relative], top_relative)
+                    closest_relative_ID = closest_relative
+                    if 'First' in closest_relative:
+                        closest_relative_ID = find_first_uniqID(close_relative_set,closest_relative)
+                    SNP_short = SNP_seq(uniq_seq[closest_relative_ID], uniq_seq[uniq_ID], total_length)
+                close_relative_set_output.setdefault(uniq_ID,[SNP_short,closest_relative])
+            else:
+                SNP_short, closest_relative = close_relative_set_output[uniq_ID]
+            # output freq
+            output_freq.append('%s\t%d\t%.3f\t%s\t%s\t\n'%(uniq_ID,
+                                                   int(samplenamesub.replace('am','').split('.')[0]),
+                                                   statistics.mean(Sample_alignment_freq[samplenamesub]),
+                                                           closest_relative,SNP_short))
+    #if cluster:
+    #    for uniq_ID in uniq_seq_count:
+    #        if uniq_seq_count[uniq_ID] < uniq_seq_count_cutoff:
+    #            uniq_seq.pop(uniq_ID)
+    #            for lines in output_freq:
+    #                if lines.startswith('%s\t'%(uniq_ID)):
+    #                    output_freq.remove(lines)
+    outputtree(uniq_seq)
+    vcf_file_filtered = open(vcf_file + '.freq', 'w')
+    vcf_file_filtered.write('#seq_type\ttimepoint\tfreq\tclosest_relative\tSNP\n' + ''.join(output_freq))
+    vcf_file_filtered.close()
+
+################################################### Main ########################################################
+# run vcf filtering
+all_vcf_file=glob.glob(os.path.join(output_dir_merge + '/merge','*.all.flt.snp.vcf'))
+Coverage = []
+Coverage.append('donor_species\tavg_depth\tSNP_retrieved\t\n')
+for vcf_file in all_vcf_file:
+    donor_species = os.path.split(vcf_file)[-1].split('.all.flt.snp.vcf')[0]
+    if donor_species in lose_set:
+        Sample_depth_cutoff = 1
+    else:
+        Sample_depth_cutoff = 2
+    # round 3 clusters
+    ref_vcf_file = glob.glob(
+        os.path.join(ref_merge_vcf_dir2, '%s.all.flt.snp.vcf.filtered.cluster*vcf' % (donor_species))) + \
+                   glob.glob(
+                       os.path.join(ref_merge_vcf_dir, '%s.all.flt.snp.vcf.filtered.cluster*vcf' % (donor_species)))
+    if ref_vcf_file == []:
+        # no round 3 clusters
+        ref_vcf_file = glob.glob(
+            os.path.join(ref_merge_vcf_dir2, '%s.all.flt.snp.vcf.filtered.vcf' % (donor_species))) + \
+                       glob.glob(os.path.join(ref_merge_vcf_dir, '%s.all.flt.snp.vcf.filtered.vcf' % (donor_species)))
+    # always round 2 result
+    ref_vcf_file = glob.glob(
+        os.path.join(ref_merge_vcf_dir2, '%s.all.flt.snp.vcf.filtered.vcf' % (donor_species))) + \
+                   glob.glob(os.path.join(ref_merge_vcf_dir, '%s.all.flt.snp.vcf.filtered.vcf' % (donor_species)))
+    print(vcf_file,ref_vcf_file)
+    Sample_name = []
+    Sample_alignment = dict()
+    Sample_alignment_seq = dict()
+    Sample_alignment_freq = dict()
+    Sample_alignment_cov = []
+    Mapped_snp = 0
+    ref_chr, ref_chr_order, total_length = load_ref_vcf(ref_vcf_file)
+    for lines in open(os.path.join(input_script_merge_sub, '%s.sh' % (donor_species)), 'r'):
+        if lines.startswith('bcftools mpileup '):
+            # setup samples
+            sample_set = lines.split('.fasta ')[1].split('\n')[0].split('  |')[0].split(' ')
+            for samples in sample_set:
+                genomename = os.path.split(samples)[-1].split(fastq_name)[0]
+                Sample_name.append(genomename)
+                Sample_alignment.setdefault(genomename,[genomename + '.1'])
+                Sample_alignment_seq.setdefault(genomename + '.1', create_SNP_seq(total_length))
+                Sample_alignment_freq.setdefault(genomename + '.1', [])
+    print('running %s' % (donor_species))
+    for lines in open(vcf_file, 'r'):
+        if not lines.startswith("#"):
+            lines_set = lines.split('\n')[0].split('\t')
+            CHR = lines_set[0]
+            POS = int(lines_set[1])
+            # a SNP confirmed in genome analysis
+            CHR_POS = '%s__%s' % (CHR, POS)
+            if CHR_POS in ref_chr:
+                REF_ref, ALT_ref = ref_chr[CHR_POS]
+                REF_meta, ALT_meta = lines_set[3:5]
+                # same ALTs
+                if [REF_ref, ALT_ref].sort() == [REF_meta, ALT_meta].sort():
+                    # add to coverage
+                    Depth = int(lines_set[7].split('DP=')[1].split(';')[0])
+                    Sample_alignment_cov.append(Depth)
+                    Mapped_snp += 1
+                    # which ALT in SNP seq
+                    SNP_pos = ref_chr_order[CHR_POS]
+                    SNP_check_all(lines_set, SNP_pos)
+    outputfreq()
+    Coverage.append('%s\t%.1f\t%s\t\n'%(donor_species,statistics.mean(Sample_alignment_cov),Mapped_snp))
+
+f1 = open(os.path.join(output_dir_merge + '/merge', 'allcov.sum.txt'),'a')
+f1.write(''.join(Coverage))
 f1.close()
+
+# run parsi tree
+parsi_files = glob.glob(os.path.join(output_dir_merge + '/merge', '*uniq.parsi.fasta'))
+for a_parsi_file in parsi_files:
+    if 'RAxML_parsimonyTree' not in a_parsi_file:
+        os.system('rm -rf %s %s' % (a_parsi_file + '.out.txt',
+                                    a_parsi_file + '.out.tree'))
+        SNP_tree_cmd3 = ('%s\n5\nV\n1\ny\n' % (a_parsi_file))
+        f1 = open(os.path.join(input_script_sub, 'parsi.optionfile.txt'), 'w')
+        f1.write(SNP_tree_cmd3)
+        f1.close()
+        os.system('rm -rf outfile outtree')
+        os.system('dnapars < %s/parsi.optionfile.txt > %s/%s.parsi.output\n' % (
+            input_script_sub, input_script_sub, os.path.split(a_parsi_file)[-1]))
+        os.system('mv outfile %s' % (a_parsi_file + '.out.txt'))
+        os.system('mv outtree %s' % (a_parsi_file + '.out.tree'))
+
+os.system('mv %s/merge/*.parsi* %s/merge/tree' % (
+    output_dir_merge, output_dir_merge))
+
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+
+# not used
+def match_seq(meta_seq, ref_seq):
+    for i in range(0, len(ref_seq)):
+        if meta_seq[i] != 'N':
+            if meta_seq[i] != ref_seq[i]:
+                return False
+    return True
+
+
+def SNP_seq(seq1, seq2, total_length):
+    SNP_total = 0
+    j = 0
+    for i in range(0, total_length):
+        if seq1[i] != seq2[i]:
+            # a SNP
+            SNP_total += 1
+            j = i
+    return SNP_total
+
+
+def compare_ref_meta():
+    # unique ref seq
+    ref_chr_seq_uniq = dict()
+    for ref_name in ref_chr_seq:
+        ref_seq = ref_chr_seq[ref_name]
+        if ref_seq not in ref_chr_seq_uniq:
+            ref_chr_seq_uniq.setdefault(ref_seq, ref_name)
+    meta_seq_uniq = dict()
+    Map = dict()
+    # unique meta seq
+    for samplenamesub in Sample_alignment_seq:
+        meta_seq = Sample_alignment_seq[samplenamesub]
+        meta_seq_uniq.setdefault(meta_seq, [])
+        Map.setdefault(samplenamesub, [])
+        meta_seq_uniq[meta_seq].append(samplenamesub)
+        # find representative ref seq
+        for ref_seq in ref_chr_seq_uniq:
+            if match_seq(meta_seq, ref_seq):
+                Map[samplenamesub].append(ref_chr_seq_uniq[ref_seq])
+    # find best hit
+    timepoint = sorted(Map)
+    for samplename in timepoint[:10]:
+        print(samplename, Map[samplename])
+

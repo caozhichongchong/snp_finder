@@ -84,7 +84,7 @@ for folder in genome_dir:
                             cmds += '%s mpileup --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -q30 -B -Ou -d3000 -f %s %s.sorted.bam  | %s call --ploidy 1 --threads %s -m > %s.raw.vcf\n' % (
                                 'bcftools', min(40, 40), database,
                                 tempbamoutput, 'bcftools', min(40, 40), tempbamoutput)
-                            cmds += '%s filter --threads %s -s  LowQual %s.raw.vcf > %s.flt.vcf \n' % (
+                            cmds += '%s filter --threads %s -i \'QUAL>30\' %s.raw.vcf > %s.flt.vcf \n' % (
                                 'bcftools', min(40, 40), tempbamoutput, tempbamoutput)
                             cmds += '%s view -H -v snps %s.flt.vcf > %s.flt.snp.vcf \n' % (
                                 'bcftools', tempbamoutput, tempbamoutput)
@@ -515,7 +515,7 @@ for folder in genome_dir:
             cmds = '%s mpileup --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -q30 -B -Ou -d3000 -f %s %s | %s call --ploidy 1 --threads %s -m > %s.raw.vcf\n' % (
                 'bcftools', min(40, 40), database,
                 ' '.join(sub_samples), 'bcftools', min(40, 40), tempbamoutput)
-            cmds += '%s filter --threads %s -s  LowQual %s.raw.vcf > %s.flt.vcf \n' % (
+            cmds += '%s filter --threads %s -i \'QUAL>30\' %s.raw.vcf > %s.flt.vcf \n' % (
                 'bcftools', min(40, 40), tempbamoutput, tempbamoutput)
             cmds += '%s view -H -v snps %s.flt.vcf > %s.flt.snp.vcf \n' % (
                 'bcftools', tempbamoutput, tempbamoutput)
@@ -523,7 +523,7 @@ for folder in genome_dir:
             cmds += '%s mpileup --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -q30 -B -Ou -d3000 -f %s %s | %s call --ploidy 1 --threads %s -m > %s.fna.raw.vcf\n' % (
                 'bcftools', min(40, 40), database2,
                 ' '.join(sub_samples2), 'bcftools', min(40, 40), tempbamoutput)
-            cmds += '%s filter --threads %s -s  LowQual %s.fna.raw.vcf > %s.fna.flt.vcf \n' % (
+            cmds += '%s filter --threads %s -i \'QUAL>30\' %s.fna.raw.vcf > %s.fna.flt.vcf \n' % (
                 'bcftools', min(40, 40), tempbamoutput, tempbamoutput)
             cmds += '%s view -H -v snps %s.fna.flt.vcf > %s.fna.flt.snp.vcf \n' % (
                 'bcftools', tempbamoutput, tempbamoutput)
@@ -1012,20 +1012,20 @@ elif Step == 3:
 if Step ==1 :
     Rough = 1  # tune cutoff
     SNP_presence_cutoff = 0.33 # avg presence in all samples
+    Poor_MLF_freq_cutoff = 0  # not set, the unqualifie samples should be mostly low cov but not two alleles, homologous genes (low major alt freq)
 else:
     Rough = 0
     SNP_presence_cutoff = 0.66  # avg presence in all samples
+    Poor_MLF_freq_cutoff = 1  # all unqualifie samples should be mostly low cov but not two alleles, homologous genes (low major alt freq)
 
 # unchanged cutoff
-Major_alt_freq_cutoff = 0.9 # major alt freq in a genome, do not allow multiple homolougs genes
 SNP_presence_sample_cutoff = 3  # num of samples passing the above criteria
-Poor_MLF_freq_cutoff = 0 #the unqualifie samples should be mostly low cov but not two alleles, homologous genes (low major alt freq)
+Major_alt_freq_cutoff = 0.9 # major alt freq in a genome, do not allow multiple homolougs genes
 
 # set up strict cutoff
 SNP_presence_cutoff2 = 0.66 # avg coverage in all samples
-Major_alt_freq_cutoff2 = 0.9 # major alt freq in a genome, do not allow multiple homolougs genes
 SNP_presence_sample_cutoff2 = 3  # num of samples passing the above criteria
-Poor_MLF_freq_cutoff2 = 1 #the unqualifie samples should be mostly low cov but not two alleles (low major alt freq)
+Poor_MLF_freq_cutoff2 = 1 # all unqualifie samples should be mostly low cov but not two alleles (low major alt freq)
 
 # cluster cutoff Step 3
 SNP_total_cutoff_2 = 50
@@ -1315,5 +1315,6 @@ if Step == 2:
         f1.write('sh %s %s.out\n' % (sub_scripts, sub_scripts))
     f1.close()
 
+# Question: why genome mapping shows SNPs that have no alternative alleles in raw.vcf of WGS mapping?
 ################################################### CLEAN UP ########################################################
 os.system('rm -rf /scratch/users/anniz44/genomes/donor_species/selected_species/SNP_currate2')
