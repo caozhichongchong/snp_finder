@@ -6,9 +6,9 @@ import snp_finder
 ################################################### Decalration #######################################################
 print ("\
 ------------------------------------------------------------------------\n\
-snp_finder identify and summarize SNPs in clonal populations\n\
+snp_finder identifies and summarizes SNPs in clonal populations\n\
 input: folders of WGS (whole genome sequences) of each species\n\
-requirement: samtools, bcftools, spades \n\n\
+requirement: samtools, bcftools, spades, minimap2, usearch \n\n\
 Copyright: An-Ni Zhang, Prof. Eric Alm, MIT\n\n\
 Citation:\n\
 Contact anniz44@mit.edu\n\

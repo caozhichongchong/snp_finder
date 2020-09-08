@@ -14,7 +14,10 @@ setup(
     'biopython',
     'argparse',
     'glob2',
-    'statistics'
+    'statistics',
+    'copy',
+    'itertools',
+    'random'
     ],
     include_package_data=True,
     long_description=open('README.md').read(),

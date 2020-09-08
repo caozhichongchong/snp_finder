@@ -1,4 +1,9 @@
 # snp_finder
+## Introduction
+* snp_finder identifies and summarizes SNPs in clonal populations
+* snp_finder can easily handel hundreds of clonal populations
+* input: WGS (whole genome sequences)
+* requirement: python >= 3.0, samtools, bcftools, spades, minimap2, usearch
 ## Install
 `pip install snp_finder`
 ### latest version (unstable though)
@@ -6,7 +11,9 @@
 `cd snp_finder`\
 `python setup.py build`\
 `python setup.py install`
-## name folder as subject_species
+## organize files
+organize folders of WGS (whole genome sequences) into each species isolated from each subject\
+rename folders as 'subject_species'
 ## prepare and correct assembled genomes for each WGS
 `snp_finder prepare -i input_folder -fq _1.fastq`\
 `sh scripts/snp_finder.sh`
