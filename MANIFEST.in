@@ -1,0 +1,2 @@
+include snp_finder/scripts/*
+include snp_finder/*.py

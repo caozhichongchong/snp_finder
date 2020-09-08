@@ -145,7 +145,6 @@ for a_species in species:
 
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
-
 # rename genome and whole genome fastq
 # put whole genome fastq into the right folder
 import glob
