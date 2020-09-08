@@ -67,31 +67,31 @@ def main():
                         help="Optional: set the thread number assigned for running XXX (default 1)",
                         metavar="1 or more", action='store', default=1, type=int)
     # requirement for software calling
-    optional.add_argument('-sp', '--spades',
+    optional.add_argument('-sp',
                           help="Optional: complete path to spades if not in PATH",
                           metavar="/usr/local/bin/spades",
                           action='store', default='spades', type=str)
-    optional.add_argument('-bw', '--bowtie',
+    optional.add_argument('-bw',
                           help="Optional: complete path to bowtie if not in PATH",
                           metavar="/usr/local/bin/bowtie",
                           action='store', default='bowtie', type=str)
-    optional.add_argument('-pro','--prodigal',
+    optional.add_argument('-pro',
                         help="Optional: complete path to prodigal if not in PATH",
                         metavar="/usr/local/bin/prodigal",
                         action='store', default='prodigal', type=str)
-    optional.add_argument('-bcf','--bcftools',
+    optional.add_argument('-bcf',
                         help="Optional: complete path to bcftools if not in PATH",
                         metavar="/usr/local/bin/bcftools",
                         action='store', default='bcftools', type=str)
-    optional.add_argument('-sam','--samtools',
+    optional.add_argument('-sam',
                         help="Optional: complete path to bwa if not in PATH",
                         metavar="/usr/local/bin/samtools",
                         action='store', default='samtools', type=str)
-    optional.add_argument('-mini', '--minimap2',
+    optional.add_argument('-mini',
                           help="Optional: complete path to minimap2 if not in PATH",
                           metavar="/usr/local/bin/minimap2",
                           action='store', default='minimap2', type=str)
-    optional.add_argument('--u','--usearch',
+    optional.add_argument('-u',
                         help="Optional: cluster genes with SNPs",
                         metavar="usearch",
                         action='store', default='usearch', type=str)
@@ -184,20 +184,20 @@ def main():
                         args.sam,
                         args.mini))
         f1.write(cmd)
-        cmd = ('python ' + workingdir + '/scripts/extract.py -i %s -fq %s -s %s -o %s -t %s -job %s -bw %s -sp %s -pro %s -bcf %s -sam %s -mini %s --u %s\n'
+        cmd = ('python ' + workingdir + '/scripts/extract.py -i %s -fq %s -s %s -o %s -t %s -job %s -bw %s -sp %s -pro %s -bcf %s -sam %s -mini %s -u %s\n'
                     % (
                         args.i, args.fq, args.s, args.o, args.t, args.job, args.bw, args.sp, args.pro, args.bcf,
                         args.sam,
                         args.mini, args.u))
         f1.write(cmd)
-        cmd = ('python ' + workingdir + '/scripts/parallel_evolution.py -i %s -fq %s -s %s -o %s -t %s -job %s -bw %s -sp %s -pro %s -bcf %s -sam %s -mini %s --u %s\n'
+        cmd = ('python ' + workingdir + '/scripts/parallel_evolution.py -i %s -fq %s -s %s -o %s -t %s -job %s -bw %s -sp %s -pro %s -bcf %s -sam %s -mini %s -u %s\n'
                     % (
                         args.i, args.fq, args.s, args.o, args.t, args.job, args.bw, args.sp, args.pro, args.bcf,
                         args.sam,
                         args.mini, args.u))
         f1.write(cmd)
     if args.command == 'meta':
-        cmd = ('python ' + workingdir + '/scripts/mapping_meta.py -i %s -fq %s -s %s -o %s -m %s -mfq %s -t %s -job %s -bw %s -sp %s -pro %s -bcf %s -sam %s -mini %s --u %s\n'
+        cmd = ('python ' + workingdir + '/scripts/mapping_meta.py -i %s -fq %s -s %s -o %s -m %s -mfq %s -t %s -job %s -bw %s -sp %s -pro %s -bcf %s -sam %s -mini %s -u %s\n'
                     % (
                         args.i, args.fq, args.s, args.o, args.m, args.mfq, args.t, args.job, args.bw, args.sp, args.pro, args.bcf,
                         args.sam,
@@ -205,7 +205,7 @@ def main():
         f1.write(cmd)
         f1.write('sh %s\n' % (os.path.join(input_script, 'allMGvcf.sh')))
         f1.write('sh %s\n' % (os.path.join(input_script, 'allMGmergevcf.sh')))
-        cmd = ('python ' + workingdir + '/scripts/SNPfilter_meta.py -i %s -fq %s -s %s -o %s -m %s -mfq %s -t %s -job %s -bw %s -sp %s -pro %s -bcf %s -sam %s -mini %s --u %s\n'
+        cmd = ('python ' + workingdir + '/scripts/SNPfilter_meta.py -i %s -fq %s -s %s -o %s -m %s -mfq %s -t %s -job %s -bw %s -sp %s -pro %s -bcf %s -sam %s -mini %s -u %s\n'
                     % (
                         args.i, args.fq, args.s, args.o, args.m, args.mfq, args.t, args.job, args.bw, args.sp, args.pro,
                         args.bcf,
@@ -213,7 +213,7 @@ def main():
                         args.mini, args.u))
         f1.write(cmd)
     if args.command == 'anno':
-        cmd = ('python ' + workingdir + '/scripts/annotate.py -i %s -fq %s -s %s -o %s -t %s -job %s -bw %s -sp %s -pro %s -bcf %s -sam %s -mini %s --u %s\n'
+        cmd = ('python ' + workingdir + '/scripts/annotate.py -i %s -fq %s -s %s -o %s -t %s -job %s -bw %s -sp %s -pro %s -bcf %s -sam %s -mini %s -u %s\n'
                     % (
                         args.i, args.fq, args.s, args.o, args.t, args.job, args.bw, args.sp, args.pro, args.bcf,
                         args.sam,
@@ -221,7 +221,7 @@ def main():
         f1.write(cmd)
         f1.write('sh %s\n' % (os.path.join(input_script, 'allannotate.sh')))
         f1.write('sh %s\n' % (os.path.join(input_script, 'allannotate_all.sh')))
-        cmd = ('python ' + workingdir + '/scripts/annotate_sum.py -i %s -fq %s -s %s -o %s -t %s -job %s -bw %s -sp %s -pro %s -bcf %s -sam %s -mini %s --u %s\n'
+        cmd = ('python ' + workingdir + '/scripts/annotate_sum.py -i %s -fq %s -s %s -o %s -t %s -job %s -bw %s -sp %s -pro %s -bcf %s -sam %s -mini %s -u %s\n'
                     % (
                         args.i, args.fq, args.s, args.o, args.t, args.job, args.bw, args.sp, args.pro, args.bcf,
                         args.sam,
