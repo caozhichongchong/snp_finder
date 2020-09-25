@@ -20,8 +20,8 @@ optional.add_argument("-s",
                       metavar='scripts/')
 optional.add_argument("-o",
                       help="a folder to store all output",
-                      type=str, default='snp_output/',
-                      metavar='snp_output/')
+                      type=str, default='pan-genome/',
+                      metavar='pan-genome/')
 # optional search parameters
 optional.add_argument('-id',
                       help="Optional: set the identity cutoff for gene clustering",
@@ -31,7 +31,7 @@ optional.add_argument('-cd',
                       metavar="99", action='store', default=99, type=int)
 optional.add_argument('-t',
                       help="Optional: set the thread number assigned for running XXX (default 1)",
-                      metavar="1 or more", action='store', default=1, type=int)
+                      metavar="1 or more", action='store', default=40, type=int)
 optional.add_argument('-job',
                       help="Optional: command to submit jobs",
                       metavar="nohup or customized",
@@ -56,11 +56,12 @@ genome_root = args.i
 genome_dir = glob.glob('%s/*'%(args.i))
 output_dir = args.o + '/pangenome'
 
-
 try:
     os.mkdir(output_dir)
 except IOError:
     pass
+
+os.system('rm -rf %s'%(input_script_pan))
 
 try:
     os.mkdir(input_script_pan)
@@ -70,20 +71,25 @@ except IOError:
 
 ################################################## Function ########################################################
 def pangenome(input_dir,species,output_dir):
-    cmds = '%s -p %s -o roary_%s -e -n --mafft -f %s/roary_%s -i %s -cd %s %s/*.gff\n' % (
-        args.roary,args.t, species, output_dir, species, args.id, args.cd, input_dir)
-    cmds += '%s %s/roary_%s/core_gene_alignment.aln > %s/roary_%s/core_gene_alignment.snp_sites.aln\n' %(
-        args.snp, output_dir, species, output_dir, species
-    )
+    cmds = ''
+    try:
+        f1 = open('%s/roary_%s/core_gene_alignment.snp_sites.aln'%(output_dir,species),'r')
+    except FileNotFoundError:
+        cmds = '%s -p %s -o roary_%s -e -n --mafft -f %s/roary_%s -i %s -cd %s %s/*.gff\n' % (
+            args.roary,args.t, species, output_dir, species, args.id, args.cd, input_dir)
+        cmds += 'py37\n%s %s/roary_%s/core_gene_alignment.aln > %s/roary_%s/core_gene_alignment.snp_sites.aln\n' %(
+            args.snp, output_dir, species, output_dir, species)
     return cmds
 
 ################################################## Main ########################################################
 for genome_folder in genome_dir:
-    species = os.path.split(genome_folder)[-1]
+    #species = os.path.split(genome_folder)[-1]
+    species = '%s_%s' % (os.path.split(genome_folder)[0].split('/')[-1], os.path.split(genome_folder)[-1])
     cmds = pangenome(genome_folder,species,output_dir)
-    f1 = open(os.path.join(input_script_pan, '%s.sh' % (species)), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n%s' % (''.join(cmds)))
-    f1.close()
+    if cmds != '':
+        f1 = open(os.path.join(input_script_pan, '%s.sh' % (species)), 'w')
+        f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
+        f1.close()
 
 f1 = open(os.path.join(input_script, 'allpangenome.sh'), 'w')
 f1.write('#!/bin/bash\nsource ~/.bashrc\n')
@@ -95,3 +101,4 @@ for sub_scripts in glob.glob(os.path.join(input_script_pan, '*.sh')):
             f1.write('nohup sh %s > %s.out &\n' % (sub_scripts, os.path.split(sub_scripts)[-1]))
 
 f1.close()
+print('please run: sh %s/allpangenome.sh'%(input_script))

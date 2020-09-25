@@ -5117,6 +5117,7 @@ input_summary = output_dir_merge + '/summary/all.WGSgenome.donor.species.remover
 input_summary_nosingleevent = output_dir_merge + '/summary/all.WGSgenome.donor.species.removerec.sum.noother.species.nosingleevent.txt'
 pre_cluster = ''
 NSratioobserve_cutoff = 0
+SNP_cutoff = ['Bifidobacterium_longum','Bifidobacterium_adolescentis','Bifidobacterium_pseudocatenulatum'] # SNP cutoff set as 3 for HS genes
 
 try:
     os.mkdir(input_script_sub)
@@ -5128,6 +5129,7 @@ except IOError:
 def cluster_uc(cluster_input):
     Clusters = dict()
     High_select2 = set()
+    High_select2_3SNP = dict()
     High_select2_output = []
     for lines in open(cluster_input, 'r'):
         line_set = lines.split('\n')[0].split('\t')
@@ -5143,11 +5145,18 @@ def cluster_uc(cluster_input):
             donor_species2 = record_name2.split('__')[0]
             species2 = donor_species2.replace(donor2 + '_', '')
             if species == species2:
-                High_select2.add(record_name2)
-                High_select2.add(record_name)
-    if High_select2 != set():
-        for record_name in High_select2:
-            High_select2_output.append('%s\tTrue\t\n'%(record_name))
+                if species not in SNP_cutoff:
+                    High_select2.add(record_name2)
+                    High_select2.add(record_name)
+                else:
+                    High_select2_3SNP.setdefault(record_name,set())
+                    High_select2_3SNP[record_name].add(record_name2)
+                    High_select2_3SNP.setdefault(record_name2, set())
+                    High_select2_3SNP[record_name2].add(record_name)
+    if High_select2_3SNP!= dict():
+        for record in High_select2_3SNP:
+            if len(High_select2_3SNP[record]) >= 3:
+                High_select2.append(record)
     return [Clusters,High_select2_output,High_select2]
 
 # correct highly selected genes dNdS
@@ -8694,10 +8703,12 @@ def prokka(output_dir, species, genome):
     return cmd
 
 allgenome = glob.glob(os.path.join(genome_root,'*')) + glob.glob(os.path.join(genome_root2,'*'))
+
 for genome_folder in allgenome:
     allfasta = glob.glob(os.path.join(genome_folder,'*%s'%(fasta_name)))
     if allfasta != []:
         species = os.path.split(genome_folder)[-1].split('_')[1]
+        donor_species = os.path.split(genome_folder)[-1]
         species_output = os.path.join(pangenome_dir,species)
         cmd = ''
         try:
@@ -8710,9 +8721,9 @@ for genome_folder in allgenome:
             if gff_file!= []:
                 print('has %s'%(gff_file[0]))
             else:
-                cmd += prokka(species_output, species, fasta)
+                cmd += prokka(species_output, donor_species, fasta)
         if cmd!= '':
-            f1 = open(os.path.join(input_script_pan, '%s.sh' % (species)), 'a')
+            f1 = open(os.path.join(input_script_pan, '%s.sh' % (donor_species)), 'a')
             f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n%s' % (''.join(cmd)))
             f1.close()
 
@@ -8724,6 +8735,110 @@ for sub_scripts in glob.glob(os.path.join(input_script_pan, '*.sh')):
 
 f1.close()
 
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# before running pangenome.py for IBD dataset, subset 5 donors per cluster
+import glob
+import os
+pangenome_dir = '/scratch/users/anniz44/genomes/pan-genome/roary/species'
+
+allpan = glob.glob('%s/*IBD*'%(pangenome_dir))
+for pan in allpan[1:]:
+    print(pan)
+    subpan = glob.glob('%s/*'%(pan))
+    species = os.path.split(pan)[-1]
+    print(subpan)
+    for a_folder in subpan:
+        allgenomes = glob.glob('%s/*.gff'%(a_folder))
+        donor_set = set()
+        for genome in allgenomes:
+            donor_set.add(os.path.split(genome)[-1].split('_')[0])
+        donor_set = list(donor_set)
+        print(donor_set)
+        total_folder = int(len(donor_set)/5)
+        print(total_folder)
+        for i in range(0,total_folder):
+            newsubfolder = os.path.join(a_folder,'%s_%s'%(species,i))
+            print(newsubfolder)
+            try:
+                os.mkdir(newsubfolder)
+            except IOError:
+                pass
+            cmd = ''
+            for donor in donor_set[i*5:(i+1)*5]:
+                cmd +=('mv %s/%s_*.gff %s/\n'%(a_folder, donor,newsubfolder))
+            os.system(cmd)
+            if i == total_folder -1:
+                cmd = ''
+                for donor in donor_set[i:]:
+                    cmd += ('mv %s/%s_*.gff %s/\n' % (a_folder, donor, newsubfolder))
+                os.system(cmd)
+
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+
+# pipeline
+# step1 clonal population clustering
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+pangenome_dir = '/scratch/users/anniz44/genomes/pan-genome/roary/species/*_IBD/*'
 print('python pangenome.py -i %s -s %s -o %s'%(pangenome_dir,input_script,pangenome_dir + '/../'))
 print('sh %s/allpangenome.sh'%(input_script))
 print('python cluster_CP.py -i %s -s %s -o %s'%(pangenome_dir,input_script,pangenome_dir + '/../'))
+print('python cluster_CP.py -i %s -s %s -o %s -clustering 2'%(pangenome_dir,input_script,pangenome_dir + '/../'))
+# step2 co-assembly and mapping
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+genome_root = '/scratch/users/anniz44/genomes/donor_species/*/round*/'
+pangenome_dir = '/scratch/users/anniz44/genomes/pan-genome/roary/'
+output_dir = '/scratch/users/anniz44/genomes/donor_species/'
+print('python mapping_WGS.py -i %s -s %s -o %s -fa %s -ref %s -cl %s'%(genome_root, input_script,
+                                                             genome_root + '/WGS/','.fasta.corrected.fasta','None', pangenome_dir))
+print('sh %s/allWGS.sh'%(input_script))
+print('python vcf_process.py -i %s -s %s -o %s'%(genome_root, input_script, genome_root + '/WGS/'))
+
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+
+# check clonal population
+from Bio import SeqIO
+from Bio.Seq import Seq
+import os
+fasta = 'core_gene_alignment.aln'
+os.system('prodigal -q -i %s -d %s.fna' % (fasta, fasta))
+output = []
+for record in SeqIO.parse(fasta, 'fasta'):
+    record_id = str(record.id)
+    record_seq = str(record.seq)
+    output.append('>%s\n%s\n' % (record_id, record_seq))
+    break
+
+f1 = open(fasta + '.subset', 'w')
+f1.write(''.join(output))
+f1.close()
+# check SNP position
+#os.system('snp-sites -v %s.subset > %s.subset.vcf'%(output,output))
+# check homologous in core genome
+#os.system('blastn -subject %s.subset  -query %s.subset -out %s.subset.homologous.txt -outfmt 6 -max_target_seqs 100'%(output,output,output))
+# check gene level SNP distribution
+os.system('prodigal -q -i %s.subset -d %s.subset.fna' % (fasta, fasta))
+#os.system('blastn -subject %s  -query %s -out %s.gene.divergence.txt -outfmt 6 -window_size 500 -perc_identity 80 -max_target_seqs 100'%(fasta,fasta,fasta))
+os.system('%s -makeudb_usearch %s.subset.fna -output %s.subset.fna.udb' %
+          ('usearch', fasta, fasta))
+os.system('%s -ublast %s.fna -db %s.subset.fna.udb  -evalue 1e-2 -accel 0.5 -blast6out %s -threads 5 -strand plus -maxaccepts 500' %
+          ('usearch', fasta, fasta, fasta + '.gene.divergence.txt'))
+
+# check gene level SNP distribution of a suspicious subset
+fasta = 'core_gene_alignment.aln'
+subset = ['ao_BiPs_g0003','ao_BiPs_g0006']
+output = []
+for record in SeqIO.parse(fasta, 'fasta'):
+    record_id = str(record.id)
+    if record_id in subset:
+        record_seq = str(record.seq)
+        output.append('>%s\n%s\n' % (record_id, record_seq))
+
+f1 = open(fasta + '.check.subset', 'w')
+f1.write(''.join(output))
+f1.close()
+os.system('prodigal -q -i %s.check.subset -d %s.check.subset.fna' % (fasta, fasta))
+os.system('%s -ublast %s.check.subset.fna -db %s.subset.fna.udb  -evalue 1e-2 -accel 0.5 -blast6out %s -threads 5 -strand plus -maxaccepts 500' %
+          ('usearch', fasta, fasta, fasta + '.check.gene.divergence.txt'))
