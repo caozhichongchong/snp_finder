@@ -84,8 +84,10 @@ optional.add_argument('-blastn',
 
 ################################################## Definition ########################################################
 args = parser.parse_args()
+TAG = 'BN10'
+#TAG = 'IBD'
 Round = args.rd
-input_script_vcf = args.s + '/vcf_round%s'%(Round)
+input_script_vcf = args.s + '/vcf_roundn%s%s'%(TAG,Round)
 input_script = args.s
 genome_root = args.i
 species_folder = glob.glob('%s/*'%(args.i))
@@ -162,43 +164,99 @@ def runspades_single(file1,file2,output_name):
 
 def run_vcf_WGS(files,files2,database,tempbamoutput):
     # generate code
-    cmds = args.bw + ' --threads %s -x %s -1 %s -2 %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
-        min(40, args.t), database, files, files2, args.sam, min(40, args.t),
-        tempbamoutput, args.sam, min(40, args.t), tempbamoutput, tempbamoutput, args.sam, min(40, args.t),
-        tempbamoutput)
-    cmds += 'rm -rf %s.bam %s.bam.bai\n' % (tempbamoutput, tempbamoutput)
-    sample_set3 = ['%s.sorted.bam' % (tempbamoutput)]
-    return [cmds, sample_set3]
+    cmds = ''
+    try:
+        f1 = open('%s.sorted.bam' % (tempbamoutput),'r')
+    except IOError:
+        cmds = args.bw + ' --threads %s -x %s -1 %s -2 %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
+            min(40, args.t), database, files, files2, args.sam, min(40, args.t),
+            tempbamoutput, args.sam, min(40, args.t), tempbamoutput, tempbamoutput, args.sam, min(40, args.t),
+            tempbamoutput)
+        cmds += 'rm -rf %s.bam %s.bam.bai\n' % (tempbamoutput, tempbamoutput)
+    return [cmds, '%s.sorted.bam' % (tempbamoutput)]
 
 def run_vcf(genome_file,database,tempbamoutput):
     # generate code
     # for curated genome
-    cmds = args.mini + ' -ax asm5 -t %s %s.mmi %s |%s view -@ %s -S -b -F 4 >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
-        min(40, args.t), database, genome_file, args.sam, min(40, args.t),
-        tempbamoutput, args.sam, min(40, args.t), tempbamoutput, tempbamoutput, args.sam, min(40, args.t),
-        tempbamoutput)
-    cmds += '#samtools depth %s.sorted.bam |  awk \'{sum[$1]+=$3; sumsq[$1]+=$3*$3; count[$1]++} END { for (id in sum) { print id,"\t",count[id],"\t",sum[id]/count[id],"\t",sqrt(sumsq[id]/count[id] - (sum[id]/count[id])**2)}}\' >> %s.sorted.bam.avgcov\n' % (
-        tempbamoutput, tempbamoutput)
-    sample_set3 = ['%s.sorted.bam' % (tempbamoutput)]
-    cmds += 'rm -rf %s.bam %s.bam.bai\n' %(tempbamoutput,tempbamoutput)
-    return [cmds,sample_set3]
+    cmds = ''
+    try:
+        f1 = open('%s.sorted.bam' % (tempbamoutput), 'r')
+    except FileNotFoundError:
+        cmds = args.mini + ' -ax asm5 -t %s %s.mmi %s |%s view -@ %s -S -b -F 4 >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
+            min(40, args.t), database, genome_file, args.sam, min(40, args.t),
+            tempbamoutput, args.sam, min(40, args.t), tempbamoutput, tempbamoutput, args.sam, min(40, args.t),
+            tempbamoutput)
+        cmds += '#samtools depth %s.sorted.bam |  awk \'{sum[$1]+=$3; sumsq[$1]+=$3*$3; count[$1]++} END { for (id in sum) { print id,"\t",count[id],"\t",sum[id]/count[id],"\t",sqrt(sumsq[id]/count[id] - (sum[id]/count[id])**2)}}\' >> %s.sorted.bam.avgcov\n' % (
+            tempbamoutput, tempbamoutput)
+        cmds += 'rm -rf %s.bam %s.bam.bai\n' %(tempbamoutput,tempbamoutput)
+    return [cmds,'%s.sorted.bam' % (tempbamoutput)]
 
-def merge_sample(database,tempbamoutputGenome,samplesetGenomecorrect):
-    # corrected genomes
-    cmds = '%s mpileup --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -q30 -Ou -B -d3000 -f %s %s | %s call -c -Ov --threads %s > %s.raw.vcf\n' % (
-        args.bcf, min(40, args.t), database,
-        ' '.join(samplesetGenomecorrect), args.bcf, min(40, args.t), tempbamoutputGenome)
-    cmds += '%s view -H -v snps %s.raw.vcf > %s.flt.snp.vcf \n' % (
-        args.bcf, tempbamoutputGenome, tempbamoutputGenome)
+def merge_sample(database,vcfoutput,allsam,coverage_only = False):
+    cmds = ''
+    allsam = list(set(allsam))
+    if len(allsam) <= 50:
+        try:
+            f1 = open('%s.raw.vcf'%(vcfoutput))
+        except FileNotFoundError:
+            cmds += '%s mpileup --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -q30 -Ou -B -d3000 -f %s %s | %s call -c -Ov --threads %s > %s.raw.vcf\n' % (
+                args.bcf, min(40, args.t), database,
+                ' '.join(allsam), args.bcf, min(40, args.t), vcfoutput)
+        if not coverage_only:
+            try:
+                f1 = open('%s.flt.snp.vcf' % (vcfoutput))
+            except FileNotFoundError:
+                cmds += '%s view -H -v snps %s.raw.vcf > %s.flt.snp.vcf \n' % (
+                    args.bcf, vcfoutput, vcfoutput)
+    else:
+        total_folder = int(len(allsam) / 50)
+        print('creating %s subclusters for %s samples'%(total_cluster,len(allsam)))
+        for i in range(0, total_folder):
+            vcfoutput2 = vcfoutput + '_subcluster%s'%(i)
+            if i == total_folder - 1:
+                try:
+                    f1 = open('%s.raw.vcf' % (vcfoutput2))
+                except FileNotFoundError:
+                    cmds += '%s mpileup --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -q30 -Ou -B -d3000 -f %s %s | %s call -c -Ov --threads %s > %s.raw.vcf\n' % (
+                        args.bcf, min(40, args.t), database,
+                        ' '.join(allsam[i * 50:]), args.bcf, min(40, args.t), vcfoutput2)
+                if not coverage_only:
+                    try:
+                        f1 = open('%s.flt.snp.vcf' % (vcfoutput2))
+                    except FileNotFoundError:
+                        cmds += '%s view -H -v snps %s.raw.vcf > %s.flt.snp.vcf \n' % (
+                            args.bcf, vcfoutput2, vcfoutput2)
+            else:
+                try:
+                    f1 = open('%s.raw.vcf' % (vcfoutput2))
+                except FileNotFoundError:
+                    cmds += '%s mpileup --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -q30 -Ou -B -d3000 -f %s %s | %s call -c -Ov --threads %s > %s.raw.vcf\n' % (
+                        args.bcf, min(40, args.t), database,
+                        ' '.join(allsam[i * 50:(i + 1) * 50]), args.bcf, min(40, args.t), vcfoutput2)
+                if not coverage_only:
+                    try:
+                        f1 = open('%s.flt.snp.vcf' % (vcfoutput2))
+                    except FileNotFoundError:
+                        cmds += '%s view -H -v snps %s.raw.vcf > %s.flt.snp.vcf \n' % (
+                            args.bcf, vcfoutput2, vcfoutput2)
     return cmds
 
 def remove_homologous(genome):
-    cmds = 'py37\npython %s/remove_homologous.py -i %s\n'%(workingdir,genome)
-    return ['%s.noHM.fasta' %(genome),cmds]
+    cmds = ''
+    genome_noHM = '%s.noHM.fasta' %(genome)
+    try:
+        f1 = open(genome_noHM,'r')
+    except FileNotFoundError:
+        cmds = 'py37\npython %s/remove_homologous.py -i %s\n'%(workingdir,genome)
+        # then run library
+        cmds += args.mini + ' -d %s.mmi %s\n' % (genome_noHM, genome_noHM)
+        cmds += 'rm -rf %s.fai\n' % (genome_noHM)
+        cmds += os.path.join(os.path.split('args.bw')[0], 'bowtie2-build') + ' %s %s\n' % (
+            genome_noHM, genome_noHM)
+    return [genome_noHM,cmds]
 
 def mapping_WGS(donor_species,donor_species_fastqall):
     try:
-        f1 = open(os.path.join(output_dir + '/merge', donor_species + '.all.flt.snp.vcf'), 'r')
+        f1 = open(os.path.join(output_dir + '/merge', donor_species + '.all.flt.snp.vcf2'), 'r')
     except FileNotFoundError:
         print('generate mapping code for %s' % (donor_species))
         folder = output_dir + '/co-assembly/%s' % (donor_species)
@@ -215,11 +273,16 @@ def mapping_WGS(donor_species,donor_species_fastqall):
                     original_folder, fastq_file_name = os.path.split(fastq_file)
                     filename = fastq_file.split(fastq_name)[0]
                     fastq_file2 = filename + fastq_name.replace('1', '2')
-                    genome_file = glob.glob(
-                        os.path.join(original_folder, fastq_file_name.split(fastq_name)[0] + genome_name)) + \
-                                  glob.glob(
-                                      os.path.join(original_folder + '/../',
-                                                   fastq_file_name.split(fastq_name)[0] + genome_name))
+                    if TAG == 'IBD':
+                        genome_file = glob.glob(os.path.join(args.i + '/*/', '%s%s' % (original_folder.split('/')[7],genome_name)))
+                        if 'PB' in original_folder:
+                            genome_file = glob.glob(os.path.join(args.i + '/*/', '%s%s' % (
+                                '%s_PB_%s'%(original_folder.split('/')[7].split('_')[0],original_folder.split('/')[7].split('_')[1]),genome_name)))
+                    else:
+                        genome_file = glob.glob(
+                            os.path.join(original_folder, fastq_file_name.split(fastq_name)[0] + genome_name)) + \
+                                      glob.glob(os.path.join(original_folder + '/../',
+                                                             fastq_file_name.split(fastq_name)[0] + genome_name))
                     if genome_file == []:
                         # need assemble the genome first
                         print('assemblying genome %s' % (genome_file))
@@ -260,25 +323,30 @@ def mapping_WGS(donor_species,donor_species_fastqall):
             if 'noHM.fasta' not in donor_species_genomename:
                 donor_species_genomename,cmds2 = remove_homologous(donor_species_genomename)
                 cmds += cmds2
-            tempbamoutputGenome = os.path.join(output_dir + '/merge', donor_species + '.all')
-            vcf_output = []
-            # then run library
-            cmds += args.mini + ' -d %s.mmi %s\n' % (donor_species_genomename, donor_species_genomename)
-            cmds += 'rm -rf %s.fai\n' % (donor_species_genomename)
-            cmds += os.path.join(os.path.split('args.bw')[0], 'bowtie2-build') + ' %s %s\n' % (
-                donor_species_genomename, donor_species_genomename)
-            for fastq_file in qualifygenome:
-                fastq_file_name = os.path.split(fastq_file)[-1]
-                filename = fastq_file.split(fastq_name)[0]
-                fastq_file2 = filename + fastq_name.replace('1', '2')
-                # map each WGS to pangenome
-                results = run_vcf_WGS(fastq_file, fastq_file2,
-                                      donor_species_genomename,
-                                      os.path.join(output_dir + '/bwa',
-                                                   fastq_file_name))
-                vcf_output += results[1]
-                cmds += results[0]
-            cmds += merge_sample(donor_species_genomename, tempbamoutputGenome, vcf_output)
+            alloutputvcf = os.path.join(output_dir + '/merge', donor_species + '.all')
+            allsam = []
+            for fastq_file in donor_species_fastqall:
+                if '.all' + fastq_name not in fastq_file and '.all.spades' not in fastq_file:
+                    if TAG == 'IBD':
+                        original_folder, fastq_file_name = os.path.split(fastq_file)
+                        fastq_file_name = original_folder.split('/')[7]
+                        if 'PB' in original_folder:
+                            fastq_file_name = '%s_PB_%s'%(fastq_file_name.split('_')[0],fastq_file_name.split('_')[1])
+                    else:
+                        fastq_file_name = os.path.split(fastq_file)[-1]
+                    filename = fastq_file.split(fastq_name)[0]
+                    fastq_file2 = filename + fastq_name.replace('1', '2')
+                    # map each WGS to pangenome
+                    results = run_vcf_WGS(fastq_file, fastq_file2,
+                                          donor_species_genomename,
+                                          os.path.join(output_dir + '/bwa',
+                                                       fastq_file_name))
+                    allsam += [results[1]]
+                    cmds += results[0]
+                    outputvcf = os.path.join(output_dir + '/merge', '%s.%s' % (donor_species, fastq_file_name))
+                    cmds += merge_sample(donor_species_genomename, outputvcf, [results[1]], True)
+            print(allsam)
+            cmds += merge_sample(donor_species_genomename, alloutputvcf, allsam, False)
             f1 = open(os.path.join(input_script_vcf, '%s.vcf.sh' % (donor_species)), 'w')
             f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
             f1.close()
@@ -295,8 +363,8 @@ if args.ref != 'None':
 # load clustering results
 if args.cl != 'None':
     Cluster = dict()
-    allclustering = glob.glob(args.cl + '/clonal_population/*.genome.cluster.txt') + \
-                    glob.glob(args.cl + '/*.genome.cluster.txt')
+    allclustering = glob.glob(args.cl + '/clonal_population/AlOn.genome.cluster.txt') + \
+                    glob.glob(args.cl + '/AlOn.genome.cluster.txt')
     for clusterfile in allclustering:
         species = os.path.split(clusterfile)[-1].split('.genome.cluster.txt')[0]
         print('find all fastq for each cluster of %s' % (species))
@@ -306,8 +374,14 @@ if args.cl != 'None':
                 genome, cluster, total_cluster = lines_set[1:4]
                 Cluster.setdefault(species, dict())
                 Cluster[species].setdefault(cluster, [])
-                fastq_file = glob.glob(os.path.join(args.i + '/*/fastq/', '%s%s' % (genome, fastq_name)))# + \
-                #glob.glob(os.path.join(args.i + '/*/', '%s%s' % (genome, fastq_name)))
+                if TAG == 'IBD':
+                    fastq_file = glob.glob('/scratch/users/mit_alm/IBD_Evo/BA/*/%s/sickle2050/filter_reads_1.fastq'%(genome))+ \
+                                 glob.glob('/scratch/users/mit_alm/IBD_Evo/BL/*/%s/sickle2050/filter_reads_1.fastq' % (genome))+ \
+                                 glob.glob('/scratch/users/mit_alm/IBD_Evo/PB/*/%s_%s/sickle2050/filter_reads_1.fastq' % (
+                                     genome.split('_')[0],genome.split('_')[-1]))
+                else:
+                    fastq_file = glob.glob(os.path.join(args.i + '/*/fastq/', '%s%s' % (genome, fastq_name))) + \
+                                 glob.glob(os.path.join(args.i + '/*/', '%s%s' % (genome, fastq_name)))
                 if fastq_file!=[]:
                     Cluster[species][cluster].append(fastq_file[0])
     # generate code
@@ -315,6 +389,7 @@ if args.cl != 'None':
         for cluster in Cluster[species]:
             donor_species = '%s_cluster%s'%(species,cluster)
             donor_species_fastqall = Cluster[species][cluster]
+            print('map genomes for %s' % (donor_species))
             print(donor_species_fastqall)
             mapping_WGS(donor_species, donor_species_fastqall)
 else:
@@ -326,7 +401,7 @@ else:
         mapping_WGS(donor_species, donor_species_fastqall)
 
 # sum all codes
-f1 = open(os.path.join(input_script, 'allWGS.sh'), 'w')
+f1 = open(os.path.join(input_script, 'allWGS%s.sh'%(TAG)), 'w')
 f1.write('#!/bin/bash\nsource ~/.bashrc\n')
 for sub_scripts in glob.glob(os.path.join(input_script_vcf, '*.vcf.sh')):
     sub_scripts_name = os.path.split(sub_scripts)[-1]
@@ -336,5 +411,5 @@ for sub_scripts in glob.glob(os.path.join(input_script_vcf, '*.vcf.sh')):
         f1.write('nohup sh %s > %s.out &\n' % (sub_scripts, os.path.split(sub_scripts)[-1]))
 
 f1.close()
-print('please run: sh %s/allWGS.sh'%(input_script))
+print('please run: sh %s/allWGS%s.sh'%(input_script,TAG))
 ################################################### END ########################################################

@@ -12,80 +12,35 @@ import argparse
 parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
 required = parser.add_argument_group('required arguments')
 optional = parser.add_argument_group('optional arguments')
-required.add_argument("-i",
-                      help="path of folders of WGS of each species",
-                      type=str, default='.',
-                      metavar='input/')
-required.add_argument("-fq",
-                      help="file extension of WGS fastq #1 files",
-                      type=str, default='_1.fastq',
-                      metavar='_1.fastq')
-# optional output setup
-
-optional.add_argument("-s",
+required.add_argument("-s",
                       help="a folder to store all scripts",
                       type=str, default='scripts/',
                       metavar='scripts/')
-optional.add_argument("-o",
+required.add_argument("-o",
                       help="a folder to store all output",
                       type=str, default='snp_output/',
                       metavar='snp_output/')
-# optional search parameters
-optional.add_argument('-t',
-                      help="Optional: set the thread number assigned for running XXX (default 1)",
-                      metavar="1 or more", action='store', default=1, type=int)
-optional.add_argument('-rd',
-                      help="Round of SNP calling and filtering",
-                      metavar="1-4", action='store', default=1, type=int)
-optional.add_argument('-job',
-                      help="Optional: command to submit jobs",
-                      metavar="nohup or customized",
-                      action='store', default='jobmit', type=str)
-# requirement for software calling
-optional.add_argument('-bw', '--bowtie',
-                          help="Optional: complete path to bowtie if not in PATH",
-                          metavar="/usr/local/bin/bowtie",
-                          action='store', default='bowtie', type=str)
-optional.add_argument('-sp', '--spades',
-                          help="Optional: complete path to spades if not in PATH",
-                          metavar="/usr/local/bin/spades",
-                          action='store', default='spades', type=str)
-optional.add_argument('-pro', '--prodigal',
-                      help="Optional: complete path to prodigal if not in PATH, None for no prodigal (default)",
-                      metavar="/usr/local/bin/prodigal",
-                      action='store', default='None', type=str)
-optional.add_argument('-bcf', '--bcftools',
-                      help="Optional: complete path to bcftools if not in PATH",
-                      metavar="/usr/local/bin/bcftools",
-                      action='store', default='bcftools', type=str)
-optional.add_argument('-sam', '--samtools',
-                      help="Optional: complete path to bwa if not in PATH",
-                      metavar="/usr/local/bin/samtools",
-                      action='store', default='samtools', type=str)
-optional.add_argument('-mini', '--minimap2',
-                      help="Optional: complete path to minimap2 if not in PATH",
-                      metavar="/usr/local/bin/minimap2",
-                      action='store', default='minimap2', type=str)
+optional.add_argument("-core",
+                      help="a file of core/flexible genes",
+                      type=str, default='None',
+                      metavar='/scratch/users/anniz44/scripts/1MG/donor_species/assembly/genome_WGS/all.denovo.gene.faa.allpangenome.sum.allsum.species.multispecies.txt')
+optional.add_argument("-cutoff",
+                      help="a file of cutoff of how many SNPs on a gene for each clonal population to call parallel evolution",
+                      type=str, default='None',
+                      metavar='total_SNP_cutoff.txt')
 
 ################################################## Definition ########################################################
 args = parser.parse_args()
 
 # set up path
-Round = args.rd
 Cluster = True
 Tree = True
 Paircompare = False
 Cov_dis = 20
 
-input_script_sub = args.s + '/vcf_round%s_tree'%(Round)
-input_script_sub_merge = args.s + '/vcf_round%s'%(Round)
 input_script = args.s
-genome_root = args.i + '/round*'
-output_dir_merge = args.o +'/vcf_round%s/merge_genome/'%(Round)
-vcf_name = '.all.flt.snp.vcf.filtered.vcf.final.vcf.removerec.vcf'
-ref_filename = '.all.spades*.fasta'
-fasta_name = '.fasta.corrected.fasta'
-fastq_name = '.sorted.bam'
+output_dir_merge = args.o
+vcf_name = '.filtered.vcf.removerec.vcf'
 
 try:
     os.mkdir(output_dir_merge + '/summary')
@@ -107,10 +62,13 @@ purines=['A','G']
 pyrimidines=['C','T']
 complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
 # Set up NS ratio cutoff
-NSratioobserve_cutoff = 1.0
+NSratioobserve_cutoff = 0
 Min_SNP_highselect_cutoff = 1/2000
 Max_SNP_highselect_cutoff = 0.02
-countOther = False #do not count other SNPs (non-gene SNPs) when calculating expected NS ratio
+total_SNP_position_cutoff = 2 # at least Xbp
+singleevent = True # curate historical events
+curate_empty = False # remove SNP type that is a subset of another SNP type
+countOther = True #do not count other SNPs (non-gene SNPs) when calculating expected NS ratio
 corecutoff = 0.9
 ################################################### new class #########################################################
 __metaclass__ = type
@@ -301,6 +259,24 @@ def transitions(REF,ALT):
         ALT = complement[ALT]
     return '%s-%s'%(REF,ALT)
 
+def curate_REF_notused(allels_set,lines_set_sub):
+    SNP_count_genome_count = [0,0,0,0]
+    for Subdepth_all in lines_set_sub:
+        print(Subdepth_all)
+        Subdepth = Subdepth_all.split(':')[-1].replace('\n', '')
+        Subdepth_set = Subdepth.split(',')
+        Subdepth_set_int = []
+        for sub_depth in Subdepth_set:
+            Subdepth_set_int.append(int(sub_depth))
+        if sum(Subdepth_set_int) > 0:
+            major_alt_frq = max(Subdepth_set_int)
+            major_alt_frq_index = Subdepth_set_int.index(major_alt_frq)
+            SNP_count_genome_count[major_alt_frq_index] += 1
+    major_alt_frq = max(SNP_count_genome_count)
+    major_alt_frq_index = SNP_count_genome_count.index(major_alt_frq)
+    major_alt = allels_set[major_alt_frq_index]
+    return [major_alt, major_alt_frq_index]
+
 def curate_REF(allels_set,Depth4):
     Subdepth = Depth4.split(':')[-1].replace('\n', '').split(',')
     Subdepth_REF = int(Subdepth[0]) + int(Subdepth[1])
@@ -397,6 +373,7 @@ def contig_to_gene(CHR, POS):
 
 def sumgene(SNP_gene_temp,genome_set_snp,donor_species,SNP_gene_species,Total,normalize = 1):
     High_select = False
+    High_select2 = False
     N_temp = SNP_gene_temp.NSratio[0]
     S_temp = SNP_gene_temp.NSratio[1]
     Other_temp = SNP_gene_temp.NSratio[2]
@@ -424,15 +401,46 @@ def sumgene(SNP_gene_temp,genome_set_snp,donor_species,SNP_gene_species,Total,no
             pair_S = SNP_gene_temp.SNP_pair[pair][1]
             new_line += ('\t%s\t%s:%s' % ('%d' % pair_freq, pair_N, pair_S))
     if N_S_sum > 0 and genome_set_snp > 1 \
-            and total_SNP_position >= 2 and \
+            and total_SNP_position >= total_SNP_position_cutoff and \
             total_SNP_position / Gene_length >= Min_SNP_highselect_cutoff \
-            and total_SNP_position / Gene_length <= Max_SNP_highselect_cutoff and\
-        SNP_gene_temp.NSratio[0] > SNP_gene_temp.NSratio[1] * NSratioobserve_cutoff:
-        High_select = True
+            and total_SNP_position / Gene_length <= Max_SNP_highselect_cutoff:
+        High_select2 = True
+        if SNP_gene_temp.NSratio[0] > SNP_gene_temp.NSratio[1] * NSratioobserve_cutoff:
+            High_select = True
     new_line += '\t%s\n'%(High_select)
-    return [new_line,High_select]
+    return [new_line,High_select,High_select2]
 
-def freq_call(vcf_file,Ref_seq, Ref_NSratio,SNP_gene_species,SNP_gene_all,SNP_gene_all_highselect,SNP_gene_all_flexible,SNP_gene_all_core,SNP_gene_species_highselect,Output2,donor_species):
+def curate_SNP_type(SNP_genome_set):
+    # remove SNP type that is a subset of another SNP type
+    Major_alt_set = SNP_genome_set[-1]
+    SNP_genome_set = list(set(SNP_genome_set[:-1]))
+    SNP_total_length = len(Major_alt_set)
+    SNP_genome_set_diff = set()
+    for j in range(0, len(SNP_genome_set)):
+        newSNP = SNP_genome_set[j]
+        diff = ['%s %s'%(i, newSNP[i]) for i in range(0, SNP_total_length) if newSNP[i] != Major_alt_set[i]]
+        SNP_genome_set_diff.add('\t'.join(diff))
+    total_count = 0
+    total_diff_length = len(SNP_genome_set_diff)
+    SNP_genome_set_diff = list(SNP_genome_set_diff)
+    for diff in SNP_genome_set_diff:
+        diff_SNP_position = [i for i in range(0, total_diff_length) if all(elem in SNP_genome_set_diff[i] for elem in diff)]
+        if len(diff_SNP_position) < 2:
+            # no other SNP type contains this SNP type
+            total_count += 1
+    return total_count
+
+def addSNP(SNP_gene_all_temp,SNP_gene_temp):
+    SNP_gene_all_temp.addpredictSNP_pair(SNP_gene_temp.SNP_pair)
+    SNP_gene_all_temp.NSratio[0] += SNP_gene_temp.NSratio[0]
+    SNP_gene_all_temp.NSratio[1] += SNP_gene_temp.NSratio[1]
+    for pair in SNP_gene_temp.SNP_pair_freq:
+        # use selected genes frequency * all genes NS ratio (codon NS sum of all genes)
+        SNP_gene_all_temp.SNP_pair[pair][0] += SNP_gene_temp.SNP_pair[pair][0]
+        SNP_gene_all_temp.SNP_pair[pair][1] += SNP_gene_temp.SNP_pair[pair][1]
+        SNP_gene_all_temp.SNP_pair_freq[pair] += SNP_gene_temp.SNP_pair_freq[pair]
+
+def freq_call(vcf_file,Ref_seq, Ref_NSratio,SNP_gene_species,SNP_gene_all,SNP_gene_all_highselect,SNP_gene_all_highselect2,SNP_gene_all_flexible,SNP_gene_all_core,SNP_gene_species_highselect,Output2,donor_species):
     Output = []
     all_SNP_gene_temp = dict()
     Total = 0
@@ -455,7 +463,7 @@ def freq_call(vcf_file,Ref_seq, Ref_NSratio,SNP_gene_species,SNP_gene_all,SNP_ge
         allels_set = [REF] + ALT_set
         Total_alleles = len(allels_set)
         SNP_count_genome_count = [[0] * Total_alleles, '', '']
-        SNP_type.setdefault(Chr, [''] * Total)
+        SNP_type.setdefault(Chr, [''] * (Total+1)) # one more for major alt set
         New_gene = 0
         if Chr not in all_SNP_gene_temp:
             SNP_gene_temp = SNP_gene()
@@ -477,6 +485,9 @@ def freq_call(vcf_file,Ref_seq, Ref_NSratio,SNP_gene_species,SNP_gene_all,SNP_ge
                 Subdepth_set_int.append(int(sub_depth))
             major_alt_frq = max(Subdepth_set_int)
             major_alt_frq_index = Subdepth_set_int.index(major_alt_frq)
+            if major_alt_frq_index >= Total_alleles:
+                major_alt_frq_index = 0
+                print(Subdepth_all,allels_set)
             major_alt = allels_set[major_alt_frq_index]
             SNP_count_genome_count[0][major_alt_frq_index] += 1
             SNP_count_genome_count[1] += major_alt
@@ -485,7 +496,8 @@ def freq_call(vcf_file,Ref_seq, Ref_NSratio,SNP_gene_species,SNP_gene_all,SNP_ge
             SNP_count_genome_count[1] += '\t'
         # currate REF and ALT
         Depth4 = lines_set[7].split('DP4=')[1].split(';')[0]
-        REF, REF_where = curate_REF(allels_set, Depth4)
+        REF, REF_where = curate_REF(allels_set, Depth4)  # as the major alt in the population
+        SNP_type[Chr][genome_ID] += REF # major alt set
         ALT_set = allels_set
         ALT_set.remove(REF)
         # calculate N or S
@@ -552,46 +564,30 @@ def freq_call(vcf_file,Ref_seq, Ref_NSratio,SNP_gene_species,SNP_gene_all,SNP_ge
     if all_SNP_gene_temp!= dict():
         for Chr in all_SNP_gene_temp:
             SNP_gene_temp = all_SNP_gene_temp[Chr]
-            total_genome_set = len(set(SNP_type[Chr])) - 1
-            sumgene_line,High_select = sumgene(SNP_gene_temp,total_genome_set,donor_species,SNP_gene_species,Total,1)
+            estimate_total_genome_set = len(set(SNP_type[Chr][:-1]))-1
+            if curate_empty and estimate_total_genome_set > 1:
+                # remove SNP type that is a subset of another SNP type
+                total_genome_set = curate_SNP_type(SNP_type[Chr]) # not including the major alt alt
+                print(total_genome_set,estimate_total_genome_set)
+                print(set(SNP_type[Chr]))
+                estimate_total_genome_set = total_genome_set
+            sumgene_line,High_select,High_select2 = sumgene(SNP_gene_temp,estimate_total_genome_set,donor_species,SNP_gene_species,Total,1)
             Output2.append(sumgene_line)
             if High_select:
-                SNP_gene_all_highselect.addpredictSNP_pair(SNP_gene_temp.SNP_pair)
-                SNP_gene_species_highselect.addpredictSNP_pair(SNP_gene_temp.SNP_pair)
-                for pair in SNP_gene_temp.SNP_pair_freq:
-                    # use selected genes frequency * all genes NS ratio (codon NS sum of all genes)
-                    SNP_gene_all_highselect.SNP_pair[pair][0] += SNP_gene_temp.SNP_pair[pair][0]
-                    SNP_gene_all_highselect.SNP_pair[pair][1] += SNP_gene_temp.SNP_pair[pair][1]
-                    SNP_gene_all_highselect.SNP_pair_freq[pair] += SNP_gene_temp.SNP_pair_freq[pair]
-                    SNP_gene_species_highselect.SNP_pair[pair][0] += SNP_gene_temp.SNP_pair[pair][0]
-                    SNP_gene_species_highselect.SNP_pair[pair][1] += SNP_gene_temp.SNP_pair[pair][1]
-                    SNP_gene_species_highselect.SNP_pair_freq[pair] += SNP_gene_temp.SNP_pair_freq[pair]
-                SNP_gene_all_highselect.NSratio[0] += SNP_gene_temp.NSratio[0]
-                SNP_gene_all_highselect.NSratio[1] += SNP_gene_temp.NSratio[1]
-                SNP_gene_species_highselect.NSratio[0] += SNP_gene_temp.NSratio[0]
-                SNP_gene_species_highselect.NSratio[1] += SNP_gene_temp.NSratio[1]
-            if '%s:%s'%(donor_species,Chr) in Core:
-                core = Core['%s:%s'%(donor_species,Chr)]
-                if core == 'all_core':
-                    SNP_gene_all_core.addpredictSNP_pair(SNP_gene_temp.SNP_pair)
-                    for pair in SNP_gene_temp.SNP_pair_freq:
-                        # use selected genes frequency * all genes NS ratio (codon NS sum of all genes)
-                        SNP_gene_all_core.SNP_pair[pair][0] += SNP_gene_temp.SNP_pair[pair][0]
-                        SNP_gene_all_core.SNP_pair[pair][1] += SNP_gene_temp.SNP_pair[pair][1]
-                        SNP_gene_all_core.SNP_pair_freq[pair] += SNP_gene_temp.SNP_pair_freq[pair]
-                    SNP_gene_all_core.NSratio[0] += SNP_gene_temp.NSratio[0]
-                    SNP_gene_all_core.NSratio[1] += SNP_gene_temp.NSratio[1]
-                elif core == 'species_flexible':
-                    SNP_gene_all_flexible.addpredictSNP_pair(SNP_gene_temp.SNP_pair)
-                    for pair in SNP_gene_temp.SNP_pair_freq:
-                        # use selected genes frequency * all genes NS ratio (codon NS sum of all genes)
-                        SNP_gene_all_flexible.SNP_pair[pair][0] += SNP_gene_temp.SNP_pair[pair][0]
-                        SNP_gene_all_flexible.SNP_pair[pair][1] += SNP_gene_temp.SNP_pair[pair][1]
-                        SNP_gene_all_flexible.SNP_pair_freq[pair] += SNP_gene_temp.SNP_pair_freq[pair]
-                    SNP_gene_all_flexible.NSratio[0] += SNP_gene_temp.NSratio[0]
-                    SNP_gene_all_flexible.NSratio[1] += SNP_gene_temp.NSratio[1]
-            else:
-                print('missing genes %s in %s'%(Chr, donor_species))
+                # use selected genes frequency * all genes NS ratio (codon NS sum of all genes)
+                addSNP(SNP_gene_all_highselect, SNP_gene_temp)
+            if High_select2:
+                addSNP(SNP_gene_all_highselect2, SNP_gene_temp)
+                addSNP(SNP_gene_species_highselect, SNP_gene_temp)
+            if args.core!='None':
+                if '%s:%s'%(donor_species,Chr) in Core:
+                    core = Core['%s:%s'%(donor_species,Chr)]
+                    if core == 'all_core':
+                        addSNP(SNP_gene_all_core, SNP_gene_temp)
+                    elif core == 'species_flexible':
+                        addSNP(SNP_gene_all_flexible, SNP_gene_temp)
+                else:
+                    print('missing genes %s in %s'%(Chr, donor_species))
         foutput = open(vcf_file + '.frq.snp', 'w')
         foutput.write('#CHR\tPOS\tMajor_ALT\tMinor_ALT\tMajor_ALT_frq\tMinor_Alt_frq\tN_or_S\tgenotype_allgenomes\n')
         foutput.write(''.join(Output))
@@ -633,18 +629,29 @@ for codon in codontable:
 
 # load core/flexible genes
 Core = dict()
-for lines in open(os.path.join(input_script,'all.denovo.gene.faa.allpangenome.sum.allsum.species.multispecies.txt')):
-    lines_set = lines.replace('\n', '').replace('\r', '').split('\t')
-    donor_species = lines_set[-3]
-    geneID = lines_set[-1]
-    core = lines_set[-4]
-    Core.setdefault('%s:%s'%(donor_species,geneID),core)
+if args.core != 'None':
+    for lines in open(args.core):
+        lines_set = lines.replace('\n', '').replace('\r', '').split('\t')
+        donor_species = lines_set[-3]
+        geneID = lines_set[-1]
+        core = lines_set[-4]
+        Core.setdefault('%s:%s'%(donor_species,geneID),core)
+
+Donor_species = dict()
+if args.cutoff != 'None':
+    for lines in open(args.cutoff):
+        lines_set = lines.replace('\n', '').replace('\r', '').split('\t')
+        donor_species = lines_set[0]
+        cutoff = int(lines_set[1])
+        Donor_species.setdefault(donor_species,cutoff)
 
 # set up sum all species
 SNP_gene_all = SNP_gene() # all denovo mutation
 SNP_gene_all.init('allspecies')
 SNP_gene_all_highselect = SNP_gene() # all mutations of highly selected genes
 SNP_gene_all_highselect.init('allspecies_highselect')
+SNP_gene_all_highselect2 = SNP_gene() # all mutations of highly selected genes no NS ratio cutoff
+SNP_gene_all_highselect2.init('allspecies_highselect_noNS')
 SNP_gene_all_flexible = SNP_gene() # all mutations of flexible genes
 SNP_gene_all_flexible.init('allspecies_flexible')
 SNP_gene_all_core = SNP_gene() # all mutations of flexible genes
@@ -652,69 +659,67 @@ SNP_gene_all_core.init('allspecies_core')
 # process each vcf file
 Output2 = []
 all_vcf_file = glob.glob(os.path.join(output_dir_merge, '*%s' % (vcf_name)))
-
 for vcf_file in all_vcf_file:
     print(vcf_file)
-    vcf_ref_file_name = os.path.split(vcf_file)[-1].split('.all.')[0]
-    donor_species = os.path.split(vcf_file)[-1].split(vcf_name)[0].split('.flt.snp.vcf')[0]
-    database = glob.glob('%s/%s/%s%s' % (genome_root, donor_species, donor_species, ref_filename))
-    if len(database) > 1:
-        print(vcf_file, database)
-    database = database[0]
+    for lines in open(vcf_file.split(vcf_name)[0], 'r'):
+        if lines.startswith('##reference=file:'):
+            database = lines.split('##reference=file:')[1].split('\n')[0]
+            break
+    donor_species = os.path.split(vcf_file)[-1].split(vcf_name)[0].split('.all')[0]
     ref_dir, ref_name = os.path.split(database)
-    database_file = database.replace('.fasta', '.fna')
-    print('running %s' % donor_species)
+    database_file = database + '.fna'
+    total_SNP_position_cutoff = Donor_species.get(donor_species,2)
+    print('running %s cutoff %s' % (donor_species,total_SNP_position_cutoff))
     Ref_seq, Ref_NSratio, Mapping, Mapping_loci, Reverse = loaddatabase(database_file)
     SNP_gene_species = SNP_gene()  # all mutations of a species
     SNP_gene_species.init(donor_species)
     SNP_gene_species_highselect = SNP_gene()  # all mutations of highly selected genes in a species
     SNP_gene_species_highselect.init(donor_species + '_highselect')
     Total = freq_call(vcf_file, Ref_seq, Ref_NSratio, SNP_gene_species, SNP_gene_all, SNP_gene_all_highselect,
+                      SNP_gene_all_highselect2,
                       SNP_gene_all_flexible,SNP_gene_all_core,SNP_gene_species_highselect,
                           Output2, donor_species)
     if sum(SNP_gene_species.NSratio) > 0:
         # there's a SNP
-        sumgene_line, High_select = sumgene(SNP_gene_species, 1, donor_species, SNP_gene_species, Total, 0)
+        sumgene_line, High_select, High_select2 = sumgene(SNP_gene_species, 1, donor_species, SNP_gene_species, Total, 0)
         Output2.append(sumgene_line)
-        print(
-            SNP_gene_species.expectNSratio, SNP_gene_species.dNdS, SNP_gene_species.NSratio,
+        print('allspecies',SNP_gene_species.dNdS, SNP_gene_species.NSratio,
             SNP_gene_species.NSratiosum)
         if sum(SNP_gene_species_highselect.NSratio) > 0:
-            sumgene_line, High_select = sumgene(SNP_gene_species_highselect, 1, donor_species, SNP_gene_species, Total, 1)
+            sumgene_line, High_select, High_select2 = sumgene(SNP_gene_species_highselect, 1, donor_species, SNP_gene_species, Total, 1)
             Output2.append(sumgene_line)
-            print(
-                SNP_gene_species_highselect.expectNSratio, SNP_gene_species_highselect.dNdS, SNP_gene_species_highselect.NSratio,
+            print('HSspecies',SNP_gene_species_highselect.dNdS, SNP_gene_species_highselect.NSratio,
                 SNP_gene_species_highselect.NSratiosum)
     else:
         Output2.append('%s\t0\t\n'%(donor_species))
 
 # sum all species dNdS
-sumgene_line,High_select = sumgene(SNP_gene_all,1,'allspecies',SNP_gene_all,'None',0)
+sumgene_line,High_select,High_select2 = sumgene(SNP_gene_all,1,'allspecies',SNP_gene_all,'None',0)
 Output2.append(sumgene_line)
+print('all',SNP_gene_all.dNdS)
 # HS genes
-sumgene_line,High_select = sumgene(SNP_gene_all_highselect,1,'allspecies',SNP_gene_all,'None',1)
+sumgene_line,High_select,High_select2 = sumgene(SNP_gene_all_highselect,1,'allspecies',SNP_gene_all,'None',1)
 Output2.append(sumgene_line)
-# flexible genes
-sumgene_line,High_select = sumgene(SNP_gene_all_flexible,1,'allspecies',SNP_gene_all,'None',1)
+print('HS',SNP_gene_all_highselect.dNdS)
+# HS genes no NS ratio cutoff
+sumgene_line,High_select,High_select2 = sumgene(SNP_gene_all_highselect2,1,'allspecies',SNP_gene_all,'None',1)
 Output2.append(sumgene_line)
-# core genes
-sumgene_line,High_select = sumgene(SNP_gene_all_core,1,'allspecies',SNP_gene_all,'None',1)
-Output2.append(sumgene_line)
+print('HS no NS cutoff',SNP_gene_all_highselect2.dNdS)
+if args.core != 'None':
+    # flexible genes
+    sumgene_line,High_select,High_select2 = sumgene(SNP_gene_all_flexible,1,'allspecies',SNP_gene_all,'None',1)
+    Output2.append(sumgene_line)
+    # core genes
+    sumgene_line,High_select,High_select2 = sumgene(SNP_gene_all_core,1,'allspecies',SNP_gene_all,'None',1)
+    Output2.append(sumgene_line)
+    print('flexible', SNP_gene_all_flexible.dNdS)
+    print('core', SNP_gene_all_core.dNdS)
 
 # output
-foutput = open(output_dir_merge + '/summary/all.donor.species.dnds.txt', 'w')
+foutput = open(output_dir_merge + '/summary/all.species.txt', 'w')
 foutput.write('#donor_species\tgene\tNo.genome\tgene_length\ttotal_SNP_genomeset\tNo.SNP\tNo.SNP_position\tN\tS\tOther\tobserved_ratio\texpected_ratio\tdNdS\t' +\
             'A-T_freq\tA-T_N:S\tA-C_freq\tA-C_N:S\tG-C_freq\tG-C_N:S\tG-T_freq\tG-T_N:S\tA-G_freq\tA-G_N:S\tG-A_freq\tG-A_N:S\tHigh_selected\n')
 foutput.write(''.join(Output2))
 foutput.close()
-
-print(SNP_gene_all.expectNSratio,SNP_gene_all.dNdS,
-      SNP_gene_all.NSratio,SNP_gene_all.NSratiosum)
-print(SNP_gene_all_highselect.expectNSratio,SNP_gene_all_highselect.dNdS,
-      SNP_gene_all_highselect.NSratio,SNP_gene_all_highselect.NSratiosum)
-print(SNP_gene_all_flexible.expectNSratio,SNP_gene_all_flexible.dNdS,
-      SNP_gene_all_flexible.NSratio,SNP_gene_all_flexible.NSratiosum)
-print(SNP_gene_all_core.expectNSratio,SNP_gene_all_core.dNdS,
-      SNP_gene_all_core.NSratio,SNP_gene_all_core.NSratiosum)
 
 ################################################### END ########################################################

@@ -49,11 +49,6 @@ def remove_homologous(genome):
             lines_set = lines.split('\n')[0].split('\t')
             CHR1,CHR2 = lines_set[0:2]
             L1, L2 = [length_CHR(CHR1), length_CHR(CHR2)]
-            # contig length cutoff
-            if L1 < CHR_length_cutoff:
-                HM_region.append(CHR1)
-            if L2 < CHR_length_cutoff:
-                HM_region.append(CHR2)
             if CHR1!=CHR2:
                 # homologous region cutoff
                 if L1 < L2:
@@ -63,8 +58,8 @@ def remove_homologous(genome):
         Newgenome = []
         for record in SeqIO.parse(genome, 'fasta'):
             record_id = str(record.id)
-            if record_id not in HM_region:
-                Newgenome.append('>%s\n%s\n'%(record_id, str(record.seq)))
+            if record_id not in HM_region and length_CHR(record_id) >= CHR_length_cutoff:
+                    Newgenome.append('>%s\n%s\n'%(record_id, str(record.seq)))
         f1 = open('%s.noHM.fasta' %(genome),'w')
         f1.write(''.join(Newgenome))
         f1.close()

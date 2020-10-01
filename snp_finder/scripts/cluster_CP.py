@@ -56,9 +56,12 @@ output_dir = args.o + '/clonal_population'
 
 core_gene_cutoff = 1000
 cluster_cutoff2 = 1.0 # cutoff for clustering 1SNP per 1kbp
-spetial_species = {'FaPr':1.2,
-                    'BL':1.4,
-                   'TuSa':0.5}
+spetial_species = {'1_BA_IBD_1':0.6,
+                  '1_BA_IBD_2':0.6,
+                   '1_BL_IBD_1':0.5,
+                   '1_BL_IBD_2': 0.1,
+                   '1_BA_IBD_3':0.3,
+                   'TuSa':}
 try:
     os.mkdir(output_dir)
 except IOError:
@@ -175,10 +178,10 @@ def tree_distance(record_before, record_name, tree,SNP_tree_distance):
     else:
         record_name = 'S' + record_name
     try:
-        return tree.distance(record_before,record_name)/SNP_tree_distance
+        return [tree.distance(record_before,record_name)/SNP_tree_distance,tree.distance(record_before,record_name)]
     except ValueError:
         print('wrong tree name',record_before,record_name)
-        return 0
+        return [0,0]
 
 ################################################## Main ########################################################
 if args.clustering == 1:
@@ -198,7 +201,7 @@ if args.clustering == 1:
                     core_gene_alignment_snp = os.path.join(roary_folder1,'core_gene_alignment.snp_sites.aln')
                     f1 = open(core_gene_alignment_snp, 'r')
                 except FileNotFoundError:
-                    cmd = '%s %s > %s\n' % (
+                    cmd = '%s -c %s > %s\n' % (
                         args.snp, core_gene_alignment, core_gene_alignment_snp)
                     os.system(cmd)
                 if checknum(os.path.join(roary_folder1,'summary_statistics.txt')) == 're-run':
@@ -213,12 +216,15 @@ if args.clustering == 1:
                         f1 = open(tree_output, 'r')
                     except FileNotFoundError:
                         parsi_tree(core_gene_alignment_snp, tree_output)
-                    tree = Phylo.read(tree_output, "newick")
+                    try:
+                        tree = Phylo.read(tree_output, "newick")
+                    except FileNotFoundError:
+                        tree = dict()
                     # load core genome alignment SNP fasta and calculate pair-wise SNPs
                     Ref = ''
                     Seq_list = dict()
                     SNP_pair = []
-                    SNP_pair.append('Genome1\tGenome2\tSNPs\tSNPs_curated_bytree\tCore_gene_length\t\n')
+                    SNP_pair.append('Genome1\tGenome2\tSNPs\ttree_distance\tSNPs_curated_bytree\tCore_gene_length\t\n')
                     Total_length = 0
                     # load total length
                     for record in SeqIO.parse(core_gene_alignment, 'fasta'):
@@ -238,16 +244,16 @@ if args.clustering == 1:
                                     SNP_total = 0
                                 else:
                                     SNP_total = SNP_seq(Seq_list[record_before], record_seq, False)
-                                SNP_total_tree = tree_distance(record_before, record_name, tree, SNP_tree_distance)
-                                SNP_pair.append('%s\t%s\t%s\t%s\t%s\t\n' % (record_before, record_name, SNP_total, SNP_total_tree,Total_length))
+                                SNP_total_tree, tree_distance_2record = tree_distance(record_before, record_name, tree, SNP_tree_distance)
+                                SNP_pair.append('%s\t%s\t%s\t%s\t%s\t%s\t\n' % (record_before, record_name, SNP_total,tree_distance_2record, SNP_total_tree,Total_length))
                         Seq_list.setdefault(record_name, record_seq)
                     if len(SNP_pair) == 1:
                         # no SNPs in core genes
-                        print('no SNPs finnd in %s'%(species))
+                        print('no SNPs found in %s'%(species))
                         for record in SeqIO.parse(core_gene_alignment, 'fasta'):
                             record_name = str(record.id)
                             for record_before in Seq_list:
-                                SNP_pair.append('%s\t%s\t%s\t%s\t%s\t\n' % (record_before, record_name, 0,0, Total_length))
+                                SNP_pair.append('%s\t%s\t%s\t%s\t%s\t%s\t\n' % (record_before, record_name, 0,0,0, Total_length))
                             Seq_list.setdefault(record_name, '')
                     f1 = open(SNP_result_file, 'w')
                     f1.write(''.join(SNP_pair))
@@ -269,7 +275,7 @@ if args.clustering == 2:
         for lines in open(SNP_result_file,'r'):
             if not lines.startswith('Genome1'):
                 lines_set = lines.split('\n')[0].split('\t')
-                record_before, record_new, SNP, SNP_curated, total_length = lines_set[0:5]
+                record_before, record_new, SNP, tree_distance_2record,SNP_curated, total_length = lines_set[0:6]
                 Cluster_SNP.setdefault(record_before,[])
                 Cluster_SNP.setdefault(record_new, [])
                 all_record.add(record_before)

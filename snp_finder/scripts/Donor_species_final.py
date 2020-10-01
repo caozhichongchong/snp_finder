@@ -8793,7 +8793,63 @@ output_dir = '/scratch/users/anniz44/genomes/donor_species/'
 print('python mapping_WGS.py -i %s -s %s -o %s -fa %s -ref %s -cl %s'%(genome_root, input_script,
                                                              genome_root + '/WGS/','.fasta.corrected.fasta','None', pangenome_dir))
 print('sh %s/allWGS.sh'%(input_script))
-print('python vcf_process.py -i %s -s %s -o %s'%(genome_root, input_script, genome_root + '/WGS/'))
+print('python vcf_process.py -i %s -s %s -o %s'%(genome_root, input_script, output_dir + '/WGS/'))
+
+# step3 remove recombination
+vcf_folder = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge'
+vcf_format = '.filtered.vcf'
+
+print('python vcf_process.py -i %s -vcf %s'%(vcf_folder, vcf_format))
+
+# step 4 calculate dnds
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
+
+print('python dnds.py -s %s -o \"%s\"'%(input_script, output_dir_merge))
+
+# stepn co-assembly mapping to metagenomes
+assembly_folder = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/co-assembly'
+fastq1 = '/scratch/users/anniz44/Metagenomes/BN10_MG'
+fastq2 = '/scratch/users/anniz44/Metagenomes/GMC/ProcessedData'
+output_dir = '/scratch/users/anniz44/genomes/donor_species/'
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+
+print('python mapping_meta.py -i %s -m %s -mfq _1.fasta -o %s -s %s/MGBN10'%(assembly_folder, fastq1, output_dir, input_script))
+print('python mapping_meta.py -i %s -m %s -mfq _1.fasta -o %s -s %s/MGGMC'%(assembly_folder, fastq2, output_dir, input_script))
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+
+# vcf processing per cluster
+import glob
+import os
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+output_dir = '/scratch/users/anniz44/genomes/donor_species/'
+genome_root = '/scratch/users/anniz44/genomes/donor_species/*/round*/'
+
+input_script_vcf = os.path.join(input_script,'vcfpro_BN10')
+#os.system('rm -rf %s'%(input_script_vcf))
+vcf_name = '.all*raw.vcf'
+try:
+    os.mkdir(input_script_vcf)
+except IOError:
+    pass
+
+all_vcf_file=glob.glob(os.path.join(output_dir + '/WGS/vcf_round1/merge_BN10/','*%s'%(vcf_name)))
+for vcf_file in all_vcf_file:
+    donor_species = os.path.split(vcf_file)[-1].split('.all')[0]
+    f1 = open(os.path.join(input_script_vcf, '%s.sh'%(donor_species)), 'w')
+    f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n')
+    f1.write('python /scratch/users/anniz44/scripts/1MG/donor_species/assembly/vcf_process.py -i \"%s\" -s %s -o %s -cluster %s\n'%(genome_root, input_script, output_dir + '/WGS/',donor_species))
+    f1.close()
+
+f1 = open(os.path.join(input_script, 'allvcfprocession.sh'), 'w')
+f1.write('#!/bin/bash\nsource ~/.bashrc\n')
+for sub_scripts in glob.glob(os.path.join(input_script_vcf, '*.sh')):
+    sub_scripts_name = os.path.split(sub_scripts)[-1]
+    f1.write('jobmit %s %s\n' % (sub_scripts, os.path.split(sub_scripts)[-1]))
+
+f1.close()
+print('please run: sh %s/allvcfprocession.sh'%(input_script))
 
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
