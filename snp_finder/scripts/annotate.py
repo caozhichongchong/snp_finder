@@ -1,5 +1,5 @@
 # start
-# find highly selected genes in one species across populations and donors
+# annotation
 import os
 import glob
 import copy

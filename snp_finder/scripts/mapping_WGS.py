@@ -84,10 +84,11 @@ optional.add_argument('-blastn',
 
 ################################################## Definition ########################################################
 args = parser.parse_args()
-TAG = 'BN10'
-#TAG = 'IBD'
+#TAG = 'BN10'
+TAG = 'IBD'
+Folder_num = 6 # 7 for PB, BA, BL; 6 for BaFr
 Round = args.rd
-input_script_vcf = args.s + '/vcf_roundn%s%s'%(TAG,Round)
+input_script_vcf = args.s + '/vcf_round%s%s'%(TAG,Round)
 input_script = args.s
 genome_root = args.i
 species_folder = glob.glob('%s/*'%(args.i))
@@ -196,7 +197,7 @@ def merge_sample(database,vcfoutput,allsam,coverage_only = False):
     allsam = list(set(allsam))
     if len(allsam) <= 50:
         try:
-            f1 = open('%s.raw.vcf'%(vcfoutput))
+            f1 = open('%s.raw.vcf'%(vcfoutput),'r')
         except FileNotFoundError:
             cmds += '%s mpileup --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -q30 -Ou -B -d3000 -f %s %s | %s call -c -Ov --threads %s > %s.raw.vcf\n' % (
                 args.bcf, min(40, args.t), database,
@@ -209,12 +210,12 @@ def merge_sample(database,vcfoutput,allsam,coverage_only = False):
                     args.bcf, vcfoutput, vcfoutput)
     else:
         total_folder = int(len(allsam) / 50)
-        print('creating %s subclusters for %s samples'%(total_cluster,len(allsam)))
-        for i in range(0, total_folder):
+        print('creating %s subclusters for %s samples'%(total_folder + 1,len(allsam)))
+        for i in range(0, total_folder + 1):
             vcfoutput2 = vcfoutput + '_subcluster%s'%(i)
-            if i == total_folder - 1:
+            if i == total_folder:
                 try:
-                    f1 = open('%s.raw.vcf' % (vcfoutput2))
+                    f1 = open('%s.raw.vcf' % (vcfoutput2),'r')
                 except FileNotFoundError:
                     cmds += '%s mpileup --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -q30 -Ou -B -d3000 -f %s %s | %s call -c -Ov --threads %s > %s.raw.vcf\n' % (
                         args.bcf, min(40, args.t), database,
@@ -274,10 +275,10 @@ def mapping_WGS(donor_species,donor_species_fastqall):
                     filename = fastq_file.split(fastq_name)[0]
                     fastq_file2 = filename + fastq_name.replace('1', '2')
                     if TAG == 'IBD':
-                        genome_file = glob.glob(os.path.join(args.i + '/*/', '%s%s' % (original_folder.split('/')[7],genome_name)))
+                        genome_file = glob.glob(os.path.join(args.i + '/*/', '%s%s' % (original_folder.split('/')[Folder_num],genome_name)))
                         if 'PB' in original_folder:
                             genome_file = glob.glob(os.path.join(args.i + '/*/', '%s%s' % (
-                                '%s_PB_%s'%(original_folder.split('/')[7].split('_')[0],original_folder.split('/')[7].split('_')[1]),genome_name)))
+                                '%s_PB_%s'%(original_folder.split('/')[Folder_num].split('_')[0],original_folder.split('/')[Folder_num].split('_')[1]),genome_name)))
                     else:
                         genome_file = glob.glob(
                             os.path.join(original_folder, fastq_file_name.split(fastq_name)[0] + genome_name)) + \
@@ -285,8 +286,14 @@ def mapping_WGS(donor_species,donor_species_fastqall):
                                                              fastq_file_name.split(fastq_name)[0] + genome_name))
                     if genome_file == []:
                         # need assemble the genome first
+                        if TAG == 'IBD':
+                            genome_file = os.path.join(args.i + '/%s'%(donor_species), '%s%s' % (original_folder.split('/')[Folder_num], genome_name))
+                        else:
+                            genome_file = os.path.join(original_folder, fastq_file_name.split(fastq_name)[0] + genome_name)
                         print('assemblying genome %s' % (genome_file))
-                        os.system(runspades_single(fastq_file, fastq_file2, genome_file))
+                        cmds = runspades_single(fastq_file, fastq_file2, genome_file)
+                        os.system(cmds)
+                        cmds = ''
                     genome_file = genome_file[0]
                     filesize = int(os.path.getsize(genome_file))
                     allgenomesize.append(filesize)
@@ -329,7 +336,7 @@ def mapping_WGS(donor_species,donor_species_fastqall):
                 if '.all' + fastq_name not in fastq_file and '.all.spades' not in fastq_file:
                     if TAG == 'IBD':
                         original_folder, fastq_file_name = os.path.split(fastq_file)
-                        fastq_file_name = original_folder.split('/')[7]
+                        fastq_file_name = original_folder.split('/')[Folder_num]
                         if 'PB' in original_folder:
                             fastq_file_name = '%s_PB_%s'%(fastq_file_name.split('_')[0],fastq_file_name.split('_')[1])
                     else:
@@ -363,8 +370,8 @@ if args.ref != 'None':
 # load clustering results
 if args.cl != 'None':
     Cluster = dict()
-    allclustering = glob.glob(args.cl + '/clonal_population/AlOn.genome.cluster.txt') + \
-                    glob.glob(args.cl + '/AlOn.genome.cluster.txt')
+    allclustering = glob.glob(args.cl + '/clonal_population/Bfragilis.genome.cluster.txt') + \
+                    glob.glob(args.cl + '/Bfragilis.genome.cluster.txt')
     for clusterfile in allclustering:
         species = os.path.split(clusterfile)[-1].split('.genome.cluster.txt')[0]
         print('find all fastq for each cluster of %s' % (species))
@@ -375,10 +382,11 @@ if args.cl != 'None':
                 Cluster.setdefault(species, dict())
                 Cluster[species].setdefault(cluster, [])
                 if TAG == 'IBD':
-                    fastq_file = glob.glob('/scratch/users/mit_alm/IBD_Evo/BA/*/%s/sickle2050/filter_reads_1.fastq'%(genome))+ \
-                                 glob.glob('/scratch/users/mit_alm/IBD_Evo/BL/*/%s/sickle2050/filter_reads_1.fastq' % (genome))+ \
-                                 glob.glob('/scratch/users/mit_alm/IBD_Evo/PB/*/%s_%s/sickle2050/filter_reads_1.fastq' % (
-                                     genome.split('_')[0],genome.split('_')[-1]))
+                    #fastq_file = glob.glob('/scratch/users/mit_alm/IBD_Evo/BA/*/%s/sickle2050/filter_reads_1.fastq'%(genome))+ \
+                    #             glob.glob('/scratch/users/mit_alm/IBD_Evo/BL/*/%s/sickle2050/filter_reads_1.fastq' % (genome))+ \
+                    #             glob.glob('/scratch/users/mit_alm/IBD_Evo/PB/*/%s_%s/sickle2050/filter_reads_1.fastq' % (
+                    #                 genome.split('_')[0],genome.split('_')[-1]))
+                    fastq_file = glob.glob('/scratch/users/mit_alm/gutevo/2016_09_20_Bfragilis_TS1/%s/sickle2050/filter_reads_1.fastq' % (genome))
                 else:
                     fastq_file = glob.glob(os.path.join(args.i + '/*/fastq/', '%s%s' % (genome, fastq_name))) + \
                                  glob.glob(os.path.join(args.i + '/*/', '%s%s' % (genome, fastq_name)))

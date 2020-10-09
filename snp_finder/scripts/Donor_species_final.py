@@ -8566,7 +8566,7 @@ except IOError:
     pass
 
 sub_samples = []
-tempbamoutputGenome = os.path.join(output_dir + '/merge', 'am_am_Bacteroides_fragilis' + '.all')
+tempbamoutputGenome = os.path.join(output_dir + '/merge', 'am_Bacteroides_fragilis' + '.all')
 for folder in genome_dir:
     cmds2 = ''
     donor_species = os.path.split(folder)[-1]
@@ -8793,19 +8793,48 @@ output_dir = '/scratch/users/anniz44/genomes/donor_species/'
 print('python mapping_WGS.py -i %s -s %s -o %s -fa %s -ref %s -cl %s'%(genome_root, input_script,
                                                              genome_root + '/WGS/','.fasta.corrected.fasta','None', pangenome_dir))
 print('sh %s/allWGS.sh'%(input_script))
+# use clusters!
 print('python vcf_process.py -i %s -s %s -o %s'%(genome_root, input_script, output_dir + '/WGS/'))
 
-# step3 remove recombination
+
+# step3 remove recombination and bad-quality SNPs
 vcf_folder = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge'
 vcf_format = '.filtered.vcf'
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+print('python SNPfilter_WGS.py -i %s -vcf %s -s %s'%(vcf_folder, vcf_format,input_script))
 
-print('python vcf_process.py -i %s -vcf %s'%(vcf_folder, vcf_format))
+
+vcf_format = '.removerec.vcf'
+# use clusters!
+print('python remove_rec.py -i %s -vcf %s'%(vcf_folder, vcf_format))
 
 # step 4 calculate dnds
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
 output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
 
-print('python dnds.py -s %s -o \"%s\"'%(input_script, output_dir_merge))
+print('python dnds.py -s %s -o %s'%(input_script, output_dir_merge))
+
+# step 5 parallel evolution
+co_assembly_dir = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/co-assembly/'
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
+
+print('python parallel_evolution.py -i %s -s %s -o %s'%(co_assembly_dir,input_script, output_dir_merge))
+print('please run %s/%s'%(input_script,'allannotate.sh'))
+# sum annotation
+output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
+print('python annotation_sum.py -o %s'%(output_dir_merge))
+
+# step 6 core or flexible
+allgenome = '/scratch/users/anniz44/genomes/donor_species/*/round*/'
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
+
+print('python core_flexible.py \"-i\" %s -s %s -o %s'%(allgenome,input_script, output_dir_merge))
+print('please run %s/%s'%(input_script,'pangenome.sh'))
+# sum core or flexible
+output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
+print('python core_flexible_sum.py -o %s'%(output_dir_merge))
 
 # stepn co-assembly mapping to metagenomes
 assembly_folder = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/co-assembly'
@@ -8816,6 +8845,31 @@ input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
 
 print('python mapping_meta.py -i %s -m %s -mfq _1.fasta -o %s -s %s/MGBN10'%(assembly_folder, fastq1, output_dir, input_script))
 print('python mapping_meta.py -i %s -m %s -mfq _1.fasta -o %s -s %s/MGGMC'%(assembly_folder, fastq2, output_dir, input_script))
+print('sh %s/MGBN10/allMGvcf.sh'%(input_script))
+print('sh %s/MGGMC/allMGvcf.sh'%(input_script))
+
+print('python SNPfilter_meta.py -i %s -mfq _1.fasta -o %s'%(assembly_folder,output_dir))
+
+# test
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+genome_root = '/scratch/users/anniz44/genomes/donor_species/jay/round3/'
+pangenome_dir = '/scratch/users/anniz44/genomes/pan-genome/roary/'
+output_dir = '/scratch/users/anniz44/genomes/donor_species/'
+
+print('python mapping_WGS.py -i %s -s %s -o %s -fa %s -ref %s -cl %s'%(genome_root, input_script,
+                                                             genome_root + '/WGS/','.fasta.corrected.fasta','None', pangenome_dir))
+print('sh %s/allWGS.sh'%(input_script))
+print('python vcf_process.py -i %s -s %s -o %s -cluster Bfragilis_clustercluster1'%(genome_root, input_script, output_dir + '/WGS/'))
+
+vcf_folder = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge'
+vcf_format = '.filtered.vcf'
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+print('python remove_rec.py -i %s -vcf %s -cluster Bfragilis_clustercluster1'%(vcf_folder, vcf_format))
+
+vcf_format = '.removerec.vcf'
+# use clusters!
+print('python SNPfilter_WGS.py -i %s -vcf %s -s %s'%(vcf_folder, vcf_format,input_script))
+
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
 
@@ -8850,6 +8904,47 @@ for sub_scripts in glob.glob(os.path.join(input_script_vcf, '*.sh')):
 
 f1.close()
 print('please run: sh %s/allvcfprocession.sh'%(input_script))
+
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# remove rec per cluster
+import glob
+import os
+vcf_folder = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge'
+vcf_format = '.filtered.vcf'
+#vcf_format = '.final.vcf'
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+input_script_vcf = os.path.join(input_script,'vcfremoverec2')
+output_name = 'removerec'
+
+os.system('rm -rf %s'%(input_script_vcf))
+try:
+    os.mkdir(input_script_vcf)
+except IOError:
+    pass
+
+all_vcf_file=glob.glob(os.path.join(vcf_folder,'*%s'%(vcf_format)))
+for vcf_file in all_vcf_file:
+    filesize = 0
+    try:
+        filesize = int(os.path.getsize(vcf_file + '.%s.snpfreq.txt' % (output_name)))
+    except FileNotFoundError:
+        pass
+    if filesize == 0:
+        donor_species = os.path.split(vcf_file)[-1].split('.raw.vcf.filtered.vcf')[0]
+        f1 = open(os.path.join(input_script_vcf, '%s.sh'%(donor_species)), 'w')
+        f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n')
+        f1.write('python /scratch/users/anniz44/scripts/1MG/donor_species/assembly/remove_rec.py -i %s -vcf %s -cluster %s\n'%(vcf_folder, vcf_format, donor_species))
+        f1.close()
+
+f1 = open(os.path.join(input_script, 'allvcfremoverec.sh'), 'w')
+f1.write('#!/bin/bash\nsource ~/.bashrc\n')
+for sub_scripts in glob.glob(os.path.join(input_script_vcf, '*.sh')):
+    sub_scripts_name = os.path.split(sub_scripts)[-1]
+    f1.write('jobmit %s %s\n' % (sub_scripts, os.path.split(sub_scripts)[-1]))
+
+f1.close()
+print('please run: sh %s/allvcfremoverec.sh'%(input_script))
 
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################

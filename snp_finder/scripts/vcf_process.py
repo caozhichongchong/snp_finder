@@ -355,7 +355,7 @@ def SNP_check_all_fq(lines_set,CHR_old,POS_old,reference_name):
             else:
                 NOSNP.add(genome_order)
         sample_num += 1
-    if SNP!= set():
+    if SNP!= set() and NOSNP != set():
         # a potential SNP
         # calculate NS
         gene_info = contig_to_gene(CHR, POS)
@@ -372,14 +372,14 @@ def SNP_check_all_fq(lines_set,CHR_old,POS_old,reference_name):
                         Ref_seq_aa = translate(Ref_seq_codon)[0]
                         temp_snp_line_AA += Ref_seq_aa
                         ALT_set = allels_set
-                        ALT_set.remove(REF)
                         for ALT in ALT_set:
-                            SNP_seq_chr = causeSNP(SNP_seq_chr, POS_gene, ALT, Reverse_chr)
-                            SNP_seq_codon = SNP_seq_chr[codon_start:(codon_start + 3)]
-                            SNP_seq_aa = translate(SNP_seq_codon)[0]
-                            temp_snp_line_AA += SNP_seq_aa
-                            temp_NorS = dnORds(Ref_seq_aa, SNP_seq_aa)
-                            temp_snp_line_NS[-1] += temp_NorS
+                            if ALT != REF:
+                                SNP_seq_chr = causeSNP(SNP_seq_chr, POS_gene, ALT, Reverse_chr)
+                                SNP_seq_codon = SNP_seq_chr[codon_start:(codon_start + 3)]
+                                SNP_seq_aa = translate(SNP_seq_codon)[0]
+                                temp_snp_line_AA += SNP_seq_aa
+                                temp_NorS = dnORds(Ref_seq_aa, SNP_seq_aa)
+                                temp_snp_line_NS[-1] += temp_NorS
         # output lines and output major alt
         temp_snp_line_pass = 'PASS'
         if CHR == CHR_old:
@@ -391,6 +391,11 @@ def SNP_check_all_fq(lines_set,CHR_old,POS_old,reference_name):
             vcf_file_POS.append('%s\t%s\t%s\n' % (CHR, POS, 0))
         POS_old = POS
         CHR_old = CHR
+        if len(SNP) > len(NOSNP):
+            NOSNP2 = NOSNP
+            NOSNP = SNP
+            SNP = NOSNP2
+            REF = allels_set[1-REF_where]
         temp_snp_line.append(CHR)
         temp_snp_line.append(str(POS))
         temp_snp_line.append(REF)
@@ -421,7 +426,10 @@ def short_contig_end(CHR,POS):
     try:
         total_length = CHR.split('size')[1]
     except IndexError:
-        total_length = CHR.split('length_')[1].split('_cov')[0]
+        try:
+            total_length = CHR.split('length_')[1].split('_cov')[0]
+        except IndexError:
+            return False
     total_length = int(total_length)
     if total_length >= CHR_length_cutoff:
         if int(POS) <= end_cutoff or int(POS) >= total_length - end_cutoff + 1:

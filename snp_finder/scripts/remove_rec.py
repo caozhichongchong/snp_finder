@@ -9,6 +9,8 @@ import itertools
 import random
 # set up path
 import argparse
+from datetime import datetime
+
 ############################################ Arguments and declarations ##############################################
 parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
 required = parser.add_argument_group('required arguments')
@@ -25,6 +27,11 @@ required.add_argument("-fq",
                       help="file extension of fastq #1 files",
                       type=str, default='_1.fastq',
                       metavar='_1.fastq')
+# optional input genome
+optional.add_argument("-cluster",
+                      help="a cluster to run, default is all clusters",
+                      type=str, default='',
+                      metavar='cluster1')
 # optional output setup
 optional.add_argument("-s",
                       help="a folder to store all scripts",
@@ -63,7 +70,7 @@ Allels['C']=3
 Allels_order = ['A','T','G','C']
 
 Length_cutoff = 2000 # minimum ref contig length
-Rec_length_cutoff = 5000 # maximum distance between recombination sites
+Rec_length_cutoff = 50000 # maximum distance between recombination sites
 Rec_SNP_cutoff = 3 # minumum no. of SNPs grouped/clustered as a recombination
 end_cutoff = 50 # contig end no SNP calling
 
@@ -149,9 +156,9 @@ def outputtree(output_name):
     vcf_file_filtered = open(vcf_file + '.%s.fasta' % (output_name), 'w')
     vcf_file_filtered.write(''.join(SNP_alignment_output))
     vcf_file_filtered.close()
-    vcf_file_filtered = open(vcf_file + '.%s.parsi.fasta' %(output_name), 'w')
-    vcf_file_filtered.write(temp_line + ''.join(SNP_alignment_output_parsi))
-    vcf_file_filtered.close()
+    #vcf_file_filtered = open(vcf_file + '.%s.parsi.fasta' %(output_name), 'w')
+    #vcf_file_filtered.write(temp_line + ''.join(SNP_alignment_output_parsi))
+    #vcf_file_filtered.close()
 
 def SNP_seq(seq1, seq2, POS_info,POS_info_CHR,POS_info_CHR_LEN,POS_info_output,G1,G2):
     SNP_total = 0
@@ -290,7 +297,7 @@ def SNP_check_all_fq(lines_set,CHR_old,POS_old,reference_name):
             else:
                 NOSNP.add(genome_order)
         sample_num += 1
-    if SNP!= set():
+    if SNP!= set() and NOSNP != set():
         # a potential SNP
         # calculate NS
         gene_info = contig_to_gene(CHR, POS)
@@ -307,14 +314,14 @@ def SNP_check_all_fq(lines_set,CHR_old,POS_old,reference_name):
                         Ref_seq_aa = translate(Ref_seq_codon)[0]
                         temp_snp_line_AA += Ref_seq_aa
                         ALT_set = allels_set
-                        ALT_set.remove(REF)
                         for ALT in ALT_set:
-                            SNP_seq_chr = causeSNP(SNP_seq_chr, POS_gene, ALT, Reverse_chr)
-                            SNP_seq_codon = SNP_seq_chr[codon_start:(codon_start + 3)]
-                            SNP_seq_aa = translate(SNP_seq_codon)[0]
-                            temp_snp_line_AA += SNP_seq_aa
-                            temp_NorS = dnORds(Ref_seq_aa, SNP_seq_aa)
-                            temp_snp_line_NS[-1] += temp_NorS
+                            if ALT != REF:
+                                SNP_seq_chr = causeSNP(SNP_seq_chr, POS_gene, ALT, Reverse_chr)
+                                SNP_seq_codon = SNP_seq_chr[codon_start:(codon_start + 3)]
+                                SNP_seq_aa = translate(SNP_seq_codon)[0]
+                                temp_snp_line_AA += SNP_seq_aa
+                                temp_NorS = dnORds(Ref_seq_aa, SNP_seq_aa)
+                                temp_snp_line_NS[-1] += temp_NorS
         # output lines and output major alt
         temp_snp_line_pass = 'PASS'
         if CHR == CHR_old:
@@ -328,6 +335,11 @@ def SNP_check_all_fq(lines_set,CHR_old,POS_old,reference_name):
         CHR_old = CHR
         temp_snp_line.append(CHR)
         temp_snp_line.append(str(POS))
+        if len(SNP) > len(NOSNP):
+            NOSNP2 = NOSNP
+            NOSNP = SNP
+            SNP = NOSNP2
+            REF = allels_set[1-REF_where]
         temp_snp_line.append(REF)
         temp_snp_line.append(','.join([ALT for ALT in allels_set if ALT != REF]))
         vcf_file_list.append(
@@ -356,7 +368,10 @@ def contig_end(CHR,POS):
     try:
         total_length = CHR.split('size')[1]
     except IndexError:
-        total_length = CHR.split('length_')[1].split('_cov')[0]
+        try:
+            total_length = CHR.split('length_')[1].split('_cov')[0]
+        except IndexError:
+            return False
     total_length = int(total_length)
     if int(POS) <= end_cutoff or int(POS) >= total_length - end_cutoff + 1:
         return True
@@ -368,101 +383,59 @@ def dis_pos(current_CHRPOS,pre_CHRPOS):
     POS2 = int(current_CHRPOS.split('\t')[1])
     return POS2 - POS1
 
-def compare_set(Ge_pre,Ge_cu): # not used
-    Ge_preset = Ge_pre.replace('\"','').split(';')
-    Ge_cuset = Ge_cu.replace('\"', '').split(';')
-    if (len(Ge_preset) >= 3 and len(Ge_cuset) >= 2) or (len(Ge_preset) >= 2 and len(Ge_cuset) >= 3):
-        # allowing no mismatch
-        return all(elem in Ge_cuset for elem in Ge_preset) or all(elem in Ge_preset for elem in Ge_cuset)
-        # allowing one mismatch
-        return len([elem for elem in Ge_cuset if elem in Ge_preset]) >= len(Ge_cuset) - 1 or \
-               len([elem for elem in Ge_preset if elem in Ge_cuset]) >= len(Ge_preset) - 1
+def match(Ge_preset,Ge_cuset):
+    Ge_preset = Ge_preset.split(';')
+    Ge_cuset = Ge_cuset.split(';')
+    if ((len(Ge_preset) >= 5 and len(Ge_cuset) >= 3) or (len(Ge_preset) >= 3 and len(Ge_cuset) >= 5)):
+        #return all(elem in Ge_cuset for elem in Ge_preset) or all(elem in Ge_preset for elem in Ge_cuset)
+        return len([elem for elem in Ge_cuset if elem in Ge_preset]) >= len(Ge_cuset) - 2 or \
+               len([elem for elem in Ge_preset if elem in Ge_cuset]) >= len(Ge_preset) - 2
     else:
-        return False
+        return Ge_cuset == Ge_preset
 
-def cluster_event(CHR_set, SNP_gen_set, SNP_N_set, CHRPOS_set):
-    for CHRgene in CHR_set:
-        allCHRPOS = CHR_set[CHRgene]
-        allge = SNP_gen_set[CHRgene]
-        allN = SNP_N_set[CHRgene]
-        uniqge = set(allge)
-        for ge in uniqge:
-            if allge.count(ge) > 1:
-                # at least 2 SNPs in the same genome set
-                samegenomeset = [i for i in range(0, len(allge)) if allge[i] == ge]
-                removeCHRPOS = [allCHRPOS[i] for i in samegenomeset]
-                N_set = [allN[i] for i in samegenomeset]
-                try:
-                    keepCHRPOS = removeCHRPOS[N_set.index('N')]
-                except ValueError:
-                    keepCHRPOS = removeCHRPOS[0]
-                removeCHRPOS.remove(keepCHRPOS)
-                CHRPOS_set += removeCHRPOS
-    return CHRPOS_set
+def compare_set(Ge_pre_set, Ge_cu_set):
+    if (match(Ge_pre_set[0],Ge_cu_set[0]) and match(Ge_pre_set[1],Ge_cu_set[1])):
+        return [[Ge_pre_set[0],Ge_cu_set[0]],[Ge_pre_set[1],Ge_cu_set[1]]]
+    elif  (match(Ge_pre_set[0], Ge_cu_set[1]) and match(Ge_pre_set[1], Ge_cu_set[0])):
+        return [[Ge_pre_set[0], Ge_cu_set[1]], [Ge_pre_set[1], Ge_cu_set[0]]]
+    else:
+        return []
 
-def remove_event(SNP_file):
-    CHRPOS_set = []
-    CHR_set = dict()
-    SNP_gen_set = dict()
-    SNP_N_set = dict()
-    # import SNP info
-    for lines in open(SNP_file,'r'):
-        lines_set = lines.split('\n')[0].split('\t')
-        CHR = lines_set[0]
-        POS = lines_set[1]
-        CHRPOS = '%s\t%s' % (CHR, POS)
-        Ge = lines_set[-6]
-        NS = lines_set[-2]
-        if 'NN' in NS:
-            NS = 'N'
-        CHRgene = lines_set[-4]  # gene based
-        if CHRgene != 'None':
-            CHR_set.setdefault(CHRgene, [])
-            CHR_set[CHRgene].append(CHRPOS)
-            SNP_gen_set.setdefault(CHRgene,[])
-            SNP_gen_set[CHRgene].append(Ge)
-            SNP_N_set.setdefault(CHRgene, [])
-            SNP_N_set[CHRgene].append(NS)
-    CHRPOS_set = cluster_event(CHR_set, SNP_gen_set, SNP_N_set, CHRPOS_set)
-    return CHRPOS_set
-
-def cluster_rec(CHR_set,SNP_gen_set,SNP_N_set,CHRPOS_set):
+def cluster_rec(CHR_set,SNP_gen_set,CHRPOS_set):
     for CHR in CHR_set:
         potential_rec = dict()
         allCHRPOS = CHR_set[CHR]
+        k = 0
         for i in range(1,len(allCHRPOS)):
             current_CHRPOS = allCHRPOS[i]
-            for j in reversed(range(0, i)):
+            for j in reversed(range(k, i)):
                 pre_CHRPOS = allCHRPOS[j]
                 Ge_pre_set = SNP_gen_set[pre_CHRPOS]
                 Ge_cu_set = SNP_gen_set[current_CHRPOS]
                 Dis = dis_pos(current_CHRPOS,pre_CHRPOS)
-                for Ge_pre in Ge_pre_set:
-                    for Ge_cu in Ge_cu_set:
-                        if Dis <= Rec_length_cutoff:
-                            if Ge_pre == Ge_cu:
-                                # cluster rec sites
-                                potential_rec.setdefault(Ge_pre, set())
-                                potential_rec[Ge_pre].add(current_CHRPOS)
-                                potential_rec[Ge_pre].add(pre_CHRPOS)
-                                potential_rec.setdefault(Ge_cu, set())
-                                potential_rec[Ge_cu].add(current_CHRPOS)
-                                potential_rec[Ge_cu].add(pre_CHRPOS)
-                                potential_rec[Ge_cu].update(list(potential_rec[Ge_pre]))
-                                potential_rec[Ge_pre].update(list(potential_rec[Ge_cu]))
-                                break
-                        else:
-                            if j == i-1:
-                                # output recombination
-                                delete_set = []
-                                for Ge_pre in potential_rec:
-                                    allrec = potential_rec[Ge_pre]
-                                    if len(allrec) >= Rec_SNP_cutoff:
-                                        CHRPOS_set += allrec
-                                    delete_set.append(Ge_pre)
-                                for Ge_pre in delete_set:
-                                    potential_rec.pop(Ge_pre, 'None')
-                            break
+                if Dis <= Rec_length_cutoff:
+                    matchresult = compare_set(Ge_pre_set, Ge_cu_set)
+                    if matchresult!= []:
+                        # matched
+                        for matchresult_set in matchresult:
+                            # cluster rec sites
+                            Ge_pre,Ge_cu = matchresult_set
+                            potential_rec.setdefault(Ge_pre, set())
+                            potential_rec[Ge_pre].add(current_CHRPOS)
+                            potential_rec[Ge_pre].add(pre_CHRPOS)
+                            potential_rec.setdefault(Ge_cu, set())
+                            potential_rec[Ge_cu].update(list(potential_rec[Ge_pre]))
+                            potential_rec[Ge_pre].update(list(potential_rec[Ge_cu]))
+                else:
+                    if j == i - 1:
+                        # output recombination
+                        for Ge_pre in potential_rec:
+                            allrec = potential_rec[Ge_pre]
+                            if len(allrec) >= Rec_SNP_cutoff:
+                                CHRPOS_set += allrec
+                        potential_rec = dict()
+                        k = j - 1
+                    break
         # output the last recombination
         for Ge_pre in potential_rec:
             allrec = potential_rec[Ge_pre]
@@ -474,7 +447,6 @@ def remove_rec(SNP_file):
     CHRPOS_set = []
     CHR_set = dict()
     SNP_gen_set = dict()
-    SNP_N_set = dict()
     # import SNP info
     for lines in open(SNP_file,'r'):
         lines_set = lines.replace('\t\t','\t').split('\n')[0].split('\t')
@@ -483,19 +455,18 @@ def remove_rec(SNP_file):
         CHRPOS = '%s\t%s' % (CHR, POS)
         Ge1 = lines_set[4]
         Ge2 = lines_set[5]
+        SNP_gen_set.setdefault(CHRPOS, [Ge2,Ge1])
         NS = lines_set[9]
         if 'NN' in NS:
             NS = 'N'
-        SNP_gen_set.setdefault(CHRPOS,[Ge1,Ge2])
-        SNP_N_set.setdefault(CHRPOS, NS)
         CHR_set.setdefault(CHR, [])
         CHR_set[CHR].append(CHRPOS)
-    CHRPOS_set = cluster_rec(CHR_set,SNP_gen_set,SNP_N_set,CHRPOS_set)
+    CHRPOS_set = cluster_rec(CHR_set,SNP_gen_set,CHRPOS_set)
     return list(set(CHRPOS_set))
 
 ################################################### Main ########################################################
 # run vcf filtering
-allvcf_file = glob.glob(os.path.join(args.i,'*%s'%(args.vcf)))
+allvcf_file = glob.glob(os.path.join(args.i,'%s*%s'%(args.cluster,args.vcf)))
 print(allvcf_file)
 reference_name = reference_set[0]
 output_name = 'removerec'
@@ -513,14 +484,12 @@ for vcf_file in allvcf_file:
         Sample_name = []
         vcf_file_POS = []
         vcf_file_POS_candidate = set()
-        SNP_alignment = dict()
-        SNP_alignment.setdefault(reference_name, '')
         Ref_seq = dict()
         Mapping = dict()
         Mapping_loci = dict()
         CHR_old = ''
         POS_old = 0
-        for lines in open(vcf_file.replace('.raw.vcf.filtered.vcf','.raw.vcf'), 'r'):
+        for lines in open(vcf_file.split(vcf_name)[0] + vcf_name, 'r'):
             if lines.startswith('##bcftoolsCommand=mpileup '):
                 # setup samples
                 sample_set = lines.split(ref_filename + ' ')[1].split('\n')[0].split(' ')
@@ -528,7 +497,6 @@ for vcf_file in allvcf_file:
                 for samples in sample_set:
                     genomename = os.path.split(samples)[-1].split(fastq_name)[0].split('all')[0].split('.sorted.bam')[0]
                     Sample_name.append(genomename.replace('.', ''))
-                    SNP_alignment.setdefault(genomename, '')
                     samplenum += 1
             if lines.startswith('##reference=file:'):
                 database_file = lines.split('##reference=file:')[1].split('\n')[0]
@@ -542,9 +510,9 @@ for vcf_file in allvcf_file:
                 os.system('%s -q -i %s -d %s.fna' % (args.pro, database_file, database_file))
             database_file = database_file + '.fna'
         Ref_seq, Mapping, Mapping_loci, Reverse = loaddatabase(database_file)
-        print('start removing recombination %s' % (donor_species))
-        CHRPOS_set = remove_rec(vcf_file.replace('.raw.vcf.filtered.vcf','.raw.vcf.filtered.snpfreq.txt'))
-        print('finished removing recombination %s'%(donor_species))
+        print('%s start removing recombination %s' % (datetime.now(),donor_species))
+        CHRPOS_set = remove_rec(vcf_file.split(vcf_name)[0] + vcf_name + '.filtered.snpfreq.txt')
+        print('%s finished removing recombination %s'%(datetime.now(), donor_species))
         vcf_file_list = []
         vcf_file_list_freq = []
         vcf_file_list_vcf = []
@@ -567,3 +535,4 @@ for vcf_file in allvcf_file:
                                                         CHR_old, POS_old, reference_name)
         outputvcf(output_name)
         outputtree(output_name)
+        print('%s finished output %s' % (datetime.now(), donor_species))

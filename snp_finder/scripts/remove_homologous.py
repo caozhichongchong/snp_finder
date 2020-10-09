@@ -45,20 +45,36 @@ def remove_homologous(genome):
                 genome,genome,length_cutoff,identity_cutoff,genome))
         print('removing homologous regions for genome %s' % (genome))
         HM_region = []
-        for lines in open('%s.homologous.txt'%(genome),'r'):
-            lines_set = lines.split('\n')[0].split('\t')
-            CHR1,CHR2 = lines_set[0:2]
-            L1, L2 = [length_CHR(CHR1), length_CHR(CHR2)]
-            if CHR1!=CHR2:
-                # homologous region cutoff
-                if L1 < L2:
-                    HM_region.append(CHR1)
-                else:
-                    HM_region.append(CHR2)
+        try:
+            for lines in open('%s.homologous.txt'%(genome),'r'):
+                lines_set = lines.split('\n')[0].split('\t')
+                CHR1,CHR2 = lines_set[0:2]
+                L1, L2 = [length_CHR(CHR1), length_CHR(CHR2)]
+                if CHR1!=CHR2:
+                    # homologous region cutoff
+                    if L1 < L2:
+                        HM_region.append(CHR1)
+                    else:
+                        HM_region.append(CHR2)
+        except IndexError:
+            Length = dict()
+            for record in SeqIO.parse(genome, 'fasta'):
+                record_id = str(record.id)
+                Length.setdefault(record_id,len(str(record.seq)))
+            for lines in open('%s.homologous.txt'%(genome),'r'):
+                lines_set = lines.split('\n')[0].split('\t')
+                CHR1,CHR2 = lines_set[0:2]
+                L1, L2 = [Length[CHR1], Length[CHR2]]
+                if CHR1!=CHR2:
+                    # homologous region cutoff
+                    if L1 < L2:
+                        HM_region.append(CHR1)
+                    else:
+                        HM_region.append(CHR2)
         Newgenome = []
         for record in SeqIO.parse(genome, 'fasta'):
             record_id = str(record.id)
-            if record_id not in HM_region and length_CHR(record_id) >= CHR_length_cutoff:
+            if record_id not in HM_region and len(str(record.seq)) >= CHR_length_cutoff:
                     Newgenome.append('>%s\n%s\n'%(record_id, str(record.seq)))
         f1 = open('%s.noHM.fasta' %(genome),'w')
         f1.write(''.join(Newgenome))

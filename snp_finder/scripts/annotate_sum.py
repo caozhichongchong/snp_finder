@@ -8,66 +8,15 @@ import argparse
 parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
 required = parser.add_argument_group('required arguments')
 optional = parser.add_argument_group('optional arguments')
-required.add_argument("-i",
-                      help="path of folders of WGS of each species",
-                      type=str, default='.',
-                      metavar='input/')
-required.add_argument("-fq",
-                      help="file extension of WGS fastq #1 files",
-                      type=str, default='_1.fastq',
-                      metavar='_1.fastq')
 # optional output setup
-
-optional.add_argument("-s",
-                      help="a folder to store all scripts",
-                      type=str, default='scripts/',
-                      metavar='scripts/')
 optional.add_argument("-o",
                       help="a folder to store all output",
                       type=str, default='snp_output/',
                       metavar='snp_output/')
-# optional search parameters
-optional.add_argument('-t',
-                      help="Optional: set the thread number assigned for running XXX (default 1)",
-                      metavar="1 or more", action='store', default=1, type=int)
-optional.add_argument('-job',
-                      help="Optional: command to submit jobs",
-                      metavar="nohup or customized",
-                      action='store', default='jobmit', type=str)
-# requirement for software calling
-optional.add_argument('-bw', '--bowtie',
-                          help="Optional: complete path to bowtie if not in PATH",
-                          metavar="/usr/local/bin/bowtie",
-                          action='store', default='bowtie', type=str)
-optional.add_argument('-sp', '--spades',
-                          help="Optional: complete path to spades if not in PATH",
-                          metavar="/usr/local/bin/spades",
-                          action='store', default='spades', type=str)
-optional.add_argument('-pro', '--prodigal',
-                      help="Optional: complete path to prodigal if not in PATH, None for no prodigal (default)",
-                      metavar="/usr/local/bin/prodigal",
-                      action='store', default='None', type=str)
-optional.add_argument('-bcf', '--bcftools',
-                      help="Optional: complete path to bcftools if not in PATH",
-                      metavar="/usr/local/bin/bcftools",
-                      action='store', default='bcftools', type=str)
-optional.add_argument('-sam', '--samtools',
-                      help="Optional: complete path to bwa if not in PATH",
-                      metavar="/usr/local/bin/samtools",
-                      action='store', default='samtools', type=str)
-optional.add_argument('-mini', '--minimap2',
-                      help="Optional: complete path to minimap2 if not in PATH",
-                      metavar="/usr/local/bin/minimap2",
-                      action='store', default='minimap2', type=str)
-optional.add_argument('--u','--usearch',
-                        help="Optional: cluster genes with SNPs",
-                        metavar="usearch",
-                        action='store', default='usearch', type=str)
 ################################################## Definition ########################################################
 args = parser.parse_args()
 
-output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/selected_species/vcf_round4/merge_genome/'
-input_script = args.s
+output_dir_merge = args.o
 database_metacyc = '/scratch/users/mit_alm/database/metacyc/genes.col'
 database_eggnog = '/scratch/users/mit_alm/database/eggnog/2_annotations.tsv'
 database_kegg = '/scratch/users/anniz44/scripts/database/Kegg/ko_formated'
@@ -118,8 +67,13 @@ def annotate_metacyc(blast_search):
     return [Blast_output,DB_name]
 
 def annotate_eggnog(blast_search):
+    Anno_eggnog = dict()
+    for lines in open(database_eggnog2,'r'):
+        lines_set = lines.split('\n')[0].split('\t')
+        Anno_eggnog.setdefault(lines_set[0],lines.split('\n')[0])
     Blast_output = dict()
     DB_name = dict()
+    DB_name_2 = dict()
     for blast_search_file in blast_search:
         for lines in open(blast_search_file, 'r'):
             if not lines.startswith('#'):
@@ -138,18 +92,23 @@ def annotate_eggnog(blast_search):
                 Blast_output[gene_name][0].append(db_name)
                 Blast_output[gene_name][1].append(identity)
                 DB_name.setdefault(db_name, ['', ''])
+                DB_name_2.setdefault(db_name, '')
     for database in [database_eggnog]:
         for lines in open(database, 'r'):
             if not lines.startswith('#'):
                 lines_set = lines.split('\n')[0].split('\t')
                 db_name = lines_set[1]
                 function_name = ''
+                annotation_catogary = ''
+                for COG in lines_set[2]:
+                    annotation_catogary += '\t' + Anno_eggnog[COG]
                 annotation_fun = lines_set[3]
                 if db_name in DB_name:
                     DB_name[db_name][0] = function_name
                     DB_name[db_name][1] = annotation_fun
+                    DB_name_2[db_name] = '%s\t%s%s'%(function_name,annotation_fun,annotation_catogary)
     best_hit(Blast_output, 1)
-    return [Blast_output,DB_name]
+    return [Blast_output,DB_name,DB_name_2]
 
 def annotate_kegg(blast_search):
     Blast_output = dict()
@@ -192,9 +151,9 @@ def annotate_kegg(blast_search):
 def annotate_prokka(fasta_input):
     cutoff = 80
     cutoff2 = 80
-    cmds = ("diamond makedb --in %s -d %s.dmnd\ndiamond blastp --query %s --db %s.dmnd --out %s.prokka.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads %s\n"
+    cmds = ("diamond makedb --in %s -d %s.dmnd\ndiamond blastp --query %s --db %s.dmnd --out %s.prokka.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
                 % (database_prokka_fasta,database_prokka_fasta,
-                   fasta_input, database_prokka_fasta, fasta_input, cutoff, cutoff2,args.t))
+                   fasta_input, database_prokka_fasta, fasta_input, cutoff, cutoff2))
     os.system(cmds)
     blast_search = '%s.prokka.txt' %(fasta_input)
     Blast_output = dict()
@@ -241,29 +200,47 @@ def annotate_gene(Blast_output1,DB_name1,All_annotation):
                 All_annotation[gene_name][2].add(anno)
     return All_annotation
 
-def sum_kegg(Blast_output1,DB_name1,Clusters):
+def sum_kegg_eggnog(Blast_outputkegg,DB_namekegg,Blast_outputegg,DB_nameegg,Clusters):
     Output = []
-    for gene_name in Blast_output1:
+    for gene_name in Blast_outputkegg:
         cluster = Clusters.get(gene_name, '')
         donor = gene_name.split('_')[0]
         donor_species = gene_name.split('__')[0].split('_CL')[0].replace('BA_BA', 'Bifido_adoles').replace('BL_BL',
                                                                                                            'Bifido_longum').replace(
-            'PB_PB', 'Parasu_butyra').replace('BA_cluste', 'Bifido_adoles').replace('BL_cluste',
+            'PB_PB', 'Paraba_butyra').replace('BA_cluste', 'Bifido_adoles').replace('BL_cluste',
                                                                                     'Bifido_longum').replace(
-            'PB_cluste', 'Parasu_butyra')
+            'PB_cluste', 'Paraba_butyra')
         species = donor_species.replace(donor + '_', '')
-        for db_name in Blast_output1[gene_name]:
-            if db_name in DB_name1:
-                Output.append('%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(cluster,donor,species,donor_species,gene_name,db_name,DB_name1[db_name]))
-    f1 = open(all_fasta + '.cluster.aa.kegg.sum.txt','w')
+        for db_name in Blast_outputkegg[gene_name]:
+            if db_name in DB_namekegg:
+                Output.append('%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(cluster,donor,species,donor_species,gene_name,db_name,DB_namekegg[db_name]))
+    f1 = open(all_fasta + '.cluster.aa.kegg.sum','w')
     f1.write('cluster\tdonor\tspecies\tdonor_species\tgene_name\tKO\tBRITE_KO1\tBRITE_KO2\tBRITE_KO3\n' + ''.join(Output))
+    f1.close()
+    Output = []
+    for gene_name in Blast_outputegg:
+        cluster = Clusters.get(gene_name, '')
+        donor = gene_name.split('_')[0]
+        donor_species = gene_name.split('__')[0].split('_CL')[0].replace('BA_BA', 'Bifido_adoles').replace('BL_BL',
+                                                                                                           'Bifido_longum').replace(
+            'PB_PB', 'Paraba_butyra').replace('BA_cluste', 'Bifido_adoles').replace('BL_cluste',
+                                                                                    'Bifido_longum').replace(
+            'PB_cluste', 'Paraba_butyra')
+        species = donor_species.replace(donor + '_', '')
+        for db_name in Blast_outputegg[gene_name]:
+            if db_name in DB_nameegg:
+                Output.append('%s\t%s\t%s\t%s\t%s\t%s\t%s\n' % (
+                cluster, donor, species, donor_species, gene_name, db_name, DB_nameegg[db_name]))
+    f1 = open(all_fasta + '.cluster.aa.eggnog.sum', 'w')
+    f1.write(
+        'cluster\tdonor\tspecies\tdonor_species\tgene_name\tEGGNOG\tannotation\tCOG\tCOG1\tCOG2\n' + ''.join(Output))
     f1.close()
 
 def cluster_genes(All_annotation,Clusters):
     for gene_name in Clusters:
         cluster = Clusters.get(gene_name,'')
         donor = gene_name.split('_')[0]
-        donor_species = gene_name.split('__')[0].split('_CL')[0].replace('BA_BA','Bifido_adoles').replace('BL_BL','Bifido_longum').replace('PB_PB','Parasu_butyra').replace('BA_cluste','Bifido_adoles').replace('BL_cluste','Bifido_longum').replace('PB_cluste','Parasu_butyra')
+        donor_species = gene_name.split('__')[0].split('_CL')[0].replace('BA_BA','Bifido_adoles').replace('BL_BL','Bifido_longum').replace('PB_PB','Paraba_butyra').replace('BA_cluste','Bifido_adoles').replace('BL_cluste','Bifido_longum').replace('PB_cluste','Paraba_butyra')
         species = donor_species.replace(donor + '_', '')
         All_annotation.setdefault(gene_name,[[], set(), set(),[], [], []])
         All_annotation[gene_name][3].append(donor)
@@ -418,11 +395,12 @@ for all_fasta in all_fasta_set:
     # set up gene annotation and clustering
     Blast_output1, DB_name1, DB_name1_2 = annotate_kegg(all_fasta + '.cluster.aa.kegg.txt')
     Blast_output2, DB_name2 = annotate_metacyc(all_fasta + '.cluster.aa.metacyc.txt')
-    Blast_output3, DB_name3 = annotate_eggnog(glob.glob(all_fasta + '.cluster.aa.eggnog.*.txt'))
+    Blast_output3, DB_name3, DB_name3_2 = annotate_eggnog(glob.glob(all_fasta + '.cluster.aa.eggnog.*.txt'))
     # sum up
     Clusters_gene = cluster_uc(all_fasta + '.uc')
-    sum_kegg(Blast_output1,DB_name1_2,Clusters_gene)
+    sum_kegg_eggnog(Blast_output1,DB_name1_2,Blast_output3,DB_name3_2,Clusters_gene)
     sum_annotation(Blast_output1, DB_name1, Blast_output2, DB_name2, Blast_output3, DB_name3, Blast_output4, DB_name4,
                    Clusters_gene)
+
 
 ################################################### END ########################################################

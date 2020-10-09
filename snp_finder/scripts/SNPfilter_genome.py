@@ -730,7 +730,7 @@ Depth_cutoff = 10 # covered by 10 reads
 Length_cutoff = 2000 # minimum ref contig length
 Rec_length_cutoff = 1000 # maximum distance between recombination sites
 Rec_SNP_cutoff = 4 # minumum no. of SNPs grouped/clustered as a recombination
-end_cutoff = 70 # contig end no SNP calling
+end_cutoff = 50 # contig end no SNP calling
 
 # Set up A T G C
 Allels = dict()
