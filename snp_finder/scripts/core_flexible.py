@@ -46,8 +46,7 @@ args = parser.parse_args()
 input_script_sub = args.s +'/pangenome'
 input_script = args.s
 mutation_dir = args.o + '/summary'
-mutation_fasta = os.path.join(mutation_dir,'all.selected.gene.faa.High_select2.faa')
-mutation_fasta2 = os.path.join(mutation_dir,'all.denovo.gene.faa')
+mutation_fasta = os.path.join(mutation_dir,'all.denovo.gene.faa')
 genome_dir = glob.glob(args.i + '/*')
 output_dir = args.o + '/pangenome'
 
@@ -65,6 +64,10 @@ except IOError:
 cutoff = 50
 cutoff2 = 80
 genome_num = 0
+try:
+    f1 = open(mutation_fasta + '.dmnd')
+except FileNotFoundError:
+    os.system('%s makedb --in %s -d %s.dmnd'%(args.dm,mutation_fasta,mutation_fasta))
 for folder in genome_dir:
     donor_species = os.path.split(folder)[-1]
     donor_species_set = donor_species.split('_')
@@ -73,19 +76,22 @@ for folder in genome_dir:
     allfasta = glob.glob(os.path.join(folder,'*.corrected.fasta'))
     for fasta in allfasta:
         fastaname = os.path.split(fasta)[-1]
+        filesize = 0
         try:
-            f1 = open(fasta + '.faa', 'r')
+            filesize = int(os.path.getsize(fasta + '.faa'))
         except FileNotFoundError:
+            pass
+        if filesize == 0:
             os.system('%s -q -i %s -a %s' % (args.pro,fasta, fasta + '.faa'))
         fasta = fasta + '.faa'
         cmds += ( "%s blastp --query %s --db %s.dmnd --out %s.denovo.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
-                    % (args.dm, fasta, mutation_fasta2, os.path.join(output_dir, fastaname), cutoff, cutoff2))
+                    % (args.dm, fasta, mutation_fasta, os.path.join(output_dir, fastaname), cutoff, cutoff2))
     if cmds!= '':
         f1 = open(os.path.join(input_script_sub, '%s.denovo.sh' % donor_species), 'a')
         f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
         f1.close()
 
-f1 = open(os.path.join(input_script, 'pangenome.sh'), 'w')
+f1 = open(os.path.join(input_script, 'allcoreflexible.sh'), 'w')
 f1.write('#!/bin/bash\nsource ~/.bashrc\n')
 for sub_scripts in glob.glob(os.path.join(input_script_sub, '*.denovo.sh')):
     if 'jobmit' in args.job:
@@ -94,4 +100,4 @@ for sub_scripts in glob.glob(os.path.join(input_script_sub, '*.denovo.sh')):
         f1.write('nohup sh %s > %s.out &\n' % (sub_scripts, os.path.split(sub_scripts)[-1]))
 
 f1.close()
-print('please run %s/%s'%(input_script,'pangenome.sh'))
+print('please run %s/%s'%(input_script,'allcoreflexible.sh'))

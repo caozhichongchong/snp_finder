@@ -3889,18 +3889,9 @@ from Bio import Phylo
 from Bio.Phylo import BaseTree
 import statistics
 
-Round = 4
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
-genome_dir = glob.glob('/scratch/users/anniz44/genomes/donor_species/selected_species/*')+\
-glob.glob('/scratch/users/anniz44/genomes/donor_species/jay/*')
-genome_root = '/scratch/users/anniz44/genomes/donor_species/*/round*'
-output_dir = '/scratch/users/anniz44/genomes/donor_species/selected_species/vcf_round%s'%(Round)
-output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/selected_species/vcf_round%s/merge_genome/'%(Round)
-output_dir_merge2 = '/scratch/users/anniz44/genomes/donor_species/jay/vcf_round%s/merge_genome/'%(Round)
-vcf_name = '.all.flt.snp.vcf.filtered.vcf.final.snp.txt'
-ref_filename = '.all.spades*.fasta'
-fasta_name = '.fasta.corrected.fasta'
-fastq_name = '.sorted.bam'
+output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge'
+vcf_name = '.raw.vcf.filtered.snp.txt'
 windowsize_set = [810000, 729000, 656100, 590490, 531441, 478296, 430466, 387419, 348677, 313809,
                   282428, 254185, 228766, 205889, 185300, 166770, 150093, 135083, 121574, 109416,
                   98474, 88626, 79763, 71786, 64607, 58146, 52331, 47097, 42387, 38148, 34333, 30899,
@@ -3915,7 +3906,7 @@ try:
 except IOError:
     pass
 
-def windowing(Seq_N):
+def windowing_concat(Seq_N):
     for windowsize in windowsize_set:
         N_S_set = [0, 0, 0]
         total_NS = ['']
@@ -3948,6 +3939,37 @@ def windowing(Seq_N):
         Output.append('%s\t%s\t%s\t%s\t%s\t\n'%(donor_species,windowsize,
                                                 N_S_set[0],N_S_set[1],N_S_set[2]))
 
+def windowing(Seq_N):
+    for windowsize in windowsize_set:
+        N_S_set = [0, 0, 0]
+        total_NS = ['']
+        for CHR in Seq_N:
+            # calculate interval
+            try:
+                total_length = CHR.split('size')[1]
+            except IndexError:
+                total_length = CHR.split('length_')[1].split('_cov')[0]
+            total_length = int(total_length)
+            if total_length >= windowsize:
+                total_interval = int(total_length / windowsize) + 1
+                total_NS += [''] * (total_interval)
+            # windowing SNPs
+            POS_set = Seq_N[CHR][0]
+            NS_set = Seq_N[CHR][1]
+            for i in range(0, len(POS_set)):
+                POS = POS_set[i]
+                loci_POS = int(POS / windowsize)
+                if total_NS[loci_POS] == '':
+                    total_NS[loci_POS] = NS_set[i]
+        N_S_set[0] += total_NS.count('N')
+        N_S_set[1] += total_NS.count('S')
+        try:
+            N_S_set[2] = N_S_set[0] / N_S_set[1]
+        except ZeroDivisionError:
+            N_S_set[2] = 'N_only'
+        Output.append('%s\t%s\t%s\t%s\t%s\t\n'%(donor_species,windowsize,
+                                                N_S_set[0],N_S_set[1],N_S_set[2]))
+
 def readSNPfile(vcf_file):
     Seq_N = dict()
     for lines in open(vcf_file,'r'):
@@ -3964,33 +3986,31 @@ def readSNPfile(vcf_file):
 
 # before remove rec
 Output = []
-all_vcf_file = glob.glob(os.path.join(output_dir_merge, '*%s' % (vcf_name)))+\
-glob.glob(os.path.join(output_dir_merge2, '*%s' % (vcf_name)))
+all_vcf_file = glob.glob(os.path.join(output_dir_merge, '*%s' % (vcf_name)))
 for vcf_file in all_vcf_file:
-    print(vcf_file)
-    vcf_ref_file_name = os.path.split(vcf_file)[-1].split('.all.')[0]
-    donor_species = os.path.split(vcf_file)[-1].split(vcf_name)[0].split('.flt.snp.vcf')[0]
-    Seq_N = readSNPfile(vcf_file)
-    windowing(Seq_N)
+    if 'BaFr_clustercluster2' not in vcf_file:
+        print(vcf_file)
+        donor_species = os.path.split(vcf_file)[-1].split(vcf_name)[0]
+        Seq_N = readSNPfile(vcf_file)
+        windowing(Seq_N)
 
-foutput = open(output_dir_merge + '/summary/all.donor.species.NSratio.new.txt', 'w')
+foutput = open(output_dir_merge + '/summary/all.donor.species.NSratio.txt', 'w')
 foutput.write('donor_species\twindowsize\tN\tS\tNS_ratio\t\n')
 foutput.write(''.join(Output))
 foutput.close()
 
 # after remove rec
-vcf_name = '.all.flt.snp.vcf.filtered.vcf.final.vcf.removerec.snp.txt'
+vcf_name = '.raw.vcf.filtered.vcf.final.snp.txt'
 Output = []
-all_vcf_file = glob.glob(os.path.join(output_dir_merge, '*%s' % (vcf_name)))+\
-glob.glob(os.path.join(output_dir_merge2, '*%s' % (vcf_name)))
+all_vcf_file = glob.glob(os.path.join(output_dir_merge, '*%s' % (vcf_name)))
 for vcf_file in all_vcf_file:
-    print(vcf_file)
-    vcf_ref_file_name = os.path.split(vcf_file)[-1].split('.all.')[0]
-    donor_species = os.path.split(vcf_file)[-1].split(vcf_name)[0].split('.flt.snp.vcf')[0]
-    Seq_N = readSNPfile(vcf_file)
-    windowing(Seq_N)
+    if 'BaFr_clustercluster2' not in vcf_file:
+        print(vcf_file)
+        donor_species = os.path.split(vcf_file)[-1].split(vcf_name)[0]
+        Seq_N = readSNPfile(vcf_file)
+        windowing(Seq_N)
 
-foutput = open(output_dir_merge + '/summary/all.donor.species.NSratio.removerec.new.txt', 'w')
+foutput = open(output_dir_merge + '/summary/all.donor.species.NSratio.removerec.txt', 'w')
 foutput.write('donor_species\twindowsize\tN\tS\tNS_ratio\t\n')
 foutput.write(''.join(Output))
 foutput.close()
@@ -8786,10 +8806,15 @@ print('sh %s/allpangenome.sh'%(input_script))
 print('python cluster_CP.py -i %s -s %s -o %s'%(pangenome_dir,input_script,pangenome_dir + '/../'))
 print('python cluster_CP.py -i %s -s %s -o %s -clustering 2'%(pangenome_dir,input_script,pangenome_dir + '/../'))
 # step2 co-assembly and mapping
+# Tag inside assembly_genome.py and mapping_WGS.py
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
 genome_root = '/scratch/users/anniz44/genomes/donor_species/*/round*/'
 pangenome_dir = '/scratch/users/anniz44/genomes/pan-genome/roary/'
 output_dir = '/scratch/users/anniz44/genomes/donor_species/'
+print('python assembly_genome.py -i %s -s %s -o %s -fa %s -ref %s -cl %s'%(genome_root, input_script,
+                                                             genome_root + '/WGS/','.fasta.corrected.fasta','None', pangenome_dir))
+print('sh %s/allassembly.sh'%(input_script))
+
 print('python mapping_WGS.py -i %s -s %s -o %s -fa %s -ref %s -cl %s'%(genome_root, input_script,
                                                              genome_root + '/WGS/','.fasta.corrected.fasta','None', pangenome_dir))
 print('sh %s/allWGS.sh'%(input_script))
@@ -8801,37 +8826,47 @@ print('python vcf_process.py -i %s -s %s -o %s'%(genome_root, input_script, outp
 vcf_folder = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge'
 vcf_format = '.filtered.vcf'
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+# use clusters!
 print('python SNPfilter_WGS.py -i %s -vcf %s -s %s'%(vcf_folder, vcf_format,input_script))
 
-
-vcf_format = '.removerec.vcf'
-# use clusters!
-print('python remove_rec.py -i %s -vcf %s'%(vcf_folder, vcf_format))
 
 # step 4 calculate dnds
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
 output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
-
-print('python dnds.py -s %s -o %s'%(input_script, output_dir_merge))
+cutoff_file = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/total_SNP_cutoff.txt'
+print('python dnds.py -s %s -o %s -cutoff %s -contig 9440'%(input_script, output_dir_merge,cutoff_file))
 
 # step 5 parallel evolution
 co_assembly_dir = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/co-assembly/'
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
 output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
+cutoff_file = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/total_SNP_cutoff_lineage.txt'
 
-print('python parallel_evolution.py -i %s -s %s -o %s'%(co_assembly_dir,input_script, output_dir_merge))
+print('python parallel_evolution.py -i %s -s %s -o %s -cutoff %s'%(co_assembly_dir,input_script, output_dir_merge,cutoff_file))
 print('please run %s/%s'%(input_script,'allannotate.sh'))
+print('please run %s/%s'%(input_script,'allannotate_all.sh'))
 # sum annotation
 output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
-print('python annotation_sum.py -o %s'%(output_dir_merge))
+print('python annotate_sum.py -o %s'%(output_dir_merge))
+# step 6 dmrca
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
+print('python dnds.py -s %s -o %s'%(input_script, output_dir_merge))
 
-# step 6 core or flexible
+# step 7 core or flexible
 allgenome = '/scratch/users/anniz44/genomes/donor_species/*/round*/'
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
 output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
 
-print('python core_flexible.py \"-i\" %s -s %s -o %s'%(allgenome,input_script, output_dir_merge))
+print('python core_flexible.py -i \"%s\" -s %s -o %s'%(allgenome,input_script, output_dir_merge))
 print('please run %s/%s'%(input_script,'pangenome.sh'))
+
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
+cutoff_file = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/total_SNP_cutoff.txt'
+core_file = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/summary/all.denovo.gene.faa.allpangenome.sum.txt'
+print('python dnds.py -s %s -o %s -cutoff %s -contig 9440 -core %s'%(input_script, output_dir_merge,cutoff_file,core_file))
+
 # sum core or flexible
 output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
 print('python core_flexible_sum.py -o %s'%(output_dir_merge))
@@ -8849,26 +8884,6 @@ print('sh %s/MGBN10/allMGvcf.sh'%(input_script))
 print('sh %s/MGGMC/allMGvcf.sh'%(input_script))
 
 print('python SNPfilter_meta.py -i %s -mfq _1.fasta -o %s'%(assembly_folder,output_dir))
-
-# test
-input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
-genome_root = '/scratch/users/anniz44/genomes/donor_species/jay/round3/'
-pangenome_dir = '/scratch/users/anniz44/genomes/pan-genome/roary/'
-output_dir = '/scratch/users/anniz44/genomes/donor_species/'
-
-print('python mapping_WGS.py -i %s -s %s -o %s -fa %s -ref %s -cl %s'%(genome_root, input_script,
-                                                             genome_root + '/WGS/','.fasta.corrected.fasta','None', pangenome_dir))
-print('sh %s/allWGS.sh'%(input_script))
-print('python vcf_process.py -i %s -s %s -o %s -cluster Bfragilis_clustercluster1'%(genome_root, input_script, output_dir + '/WGS/'))
-
-vcf_folder = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge'
-vcf_format = '.filtered.vcf'
-input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
-print('python remove_rec.py -i %s -vcf %s -cluster Bfragilis_clustercluster1'%(vcf_folder, vcf_format))
-
-vcf_format = '.removerec.vcf'
-# use clusters!
-print('python SNPfilter_WGS.py -i %s -vcf %s -s %s'%(vcf_folder, vcf_format,input_script))
 
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
@@ -8915,8 +8930,8 @@ vcf_format = '.filtered.vcf'
 #vcf_format = '.final.vcf'
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
 input_script_vcf = os.path.join(input_script,'vcfremoverec2')
-output_name = 'removerec'
-
+output_name = 'final.removerec'
+rec_set = ['EsCo','PB','BL','BA','TuSa','BiPs']
 os.system('rm -rf %s'%(input_script_vcf))
 try:
     os.mkdir(input_script_vcf)
@@ -8924,18 +8939,26 @@ except IOError:
     pass
 
 all_vcf_file=glob.glob(os.path.join(vcf_folder,'*%s'%(vcf_format)))
+Donor_species = set()
 for vcf_file in all_vcf_file:
-    filesize = 0
-    try:
-        filesize = int(os.path.getsize(vcf_file + '.%s.snpfreq.txt' % (output_name)))
-    except FileNotFoundError:
-        pass
-    if filesize == 0:
-        donor_species = os.path.split(vcf_file)[-1].split('.raw.vcf.filtered.vcf')[0]
-        f1 = open(os.path.join(input_script_vcf, '%s.sh'%(donor_species)), 'w')
-        f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n')
-        f1.write('python /scratch/users/anniz44/scripts/1MG/donor_species/assembly/remove_rec.py -i %s -vcf %s -cluster %s\n'%(vcf_folder, vcf_format, donor_species))
-        f1.close()
+    donor_species = os.path.split(vcf_file)[-1].split('.all')[0]
+    if donor_species not in Donor_species:
+        Donor_species.add(donor_species)
+        parsi_output = os.path.join(os.path.split(vcf_file)[0], '%s.all.parsi.fasta' % (donor_species))
+        filesize = 0
+        try:
+            filesize = int(os.path.getsize(parsi_output))
+        except FileNotFoundError:
+            pass
+        if filesize == 0:
+            if any(item in donor_species for item in rec_set):
+                rec_cutoff = 50000
+            else:
+                rec_cutoff = 5000
+            f1 = open(os.path.join(input_script_vcf, '%s.sh'%(donor_species)), 'w')
+            f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n')
+            f1.write('python /scratch/users/anniz44/scripts/1MG/donor_species/assembly/SNPfilter_WGS.py -i %s -vcf %s -cluster %s -s %s -rec %s\n'%(vcf_folder, vcf_format, donor_species,input_script,rec_cutoff))
+            f1.close()
 
 f1 = open(os.path.join(input_script, 'allvcfremoverec.sh'), 'w')
 f1.write('#!/bin/bash\nsource ~/.bashrc\n')
@@ -8993,3 +9016,190 @@ f1.close()
 os.system('prodigal -q -i %s.check.subset -d %s.check.subset.fna' % (fasta, fasta))
 os.system('%s -ublast %s.check.subset.fna -db %s.subset.fna.udb  -evalue 1e-2 -accel 0.5 -blast6out %s -threads 5 -strand plus -maxaccepts 500' %
           ('usearch', fasta, fasta, fasta + '.check.gene.divergence.txt'))
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# set cutoff for recombination windows to calculate NS ratio
+import glob
+import os
+from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio import Phylo
+from Bio.Phylo import BaseTree
+import statistics
+
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge'
+vcf_name = '.raw.vcf.filtered.snp.txt'
+windowsize_set = [810000, 729000, 656100, 590490, 531441, 478296, 430466, 387419, 348677, 313809,
+                  282428, 254185, 228766, 205889, 185300, 166770, 150093, 135083, 121574, 109416,
+                  98474, 88626, 79763, 71786, 64607, 58146, 52331, 47097, 42387, 38148, 34333, 30899,
+                  27809, 25028, 22525, 20272, 18244, 16419, 14777, 13299, 11969, 10772, 9694, 8724,
+                  7851, 7065, 6358, 5722, 5149, 4634, 4170, 3753, 3377, 3039, 2735, 2461, 2214, 1992,
+                  1792, 1612, 1450, 1305, 1174, 1056, 950, 855, 769, 692, 622, 559, 503, 452, 406, 365,
+                  328, 295, 265, 238, 214, 192, 172, 154, 138, 124, 111, 99, 89, 80, 72, 64, 57, 51, 45,
+                  40, 36, 32, 28, 25, 22, 19, 17, 15, 13, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1]
+
+try:
+    os.mkdir(output_dir_merge + '/summary')
+except IOError:
+    pass
+
+def windowing_concat(Seq_N):
+    for windowsize in windowsize_set:
+        N_S_set = [0, 0, 0]
+        total_NS = ['']
+        POS_old = 0
+        for CHR in Seq_N:
+            # calculate interval
+            try:
+                total_length = CHR.split('size')[1]
+            except IndexError:
+                total_length = CHR.split('length_')[1].split('_cov')[0]
+            total_length = int(total_length)
+            if POS_old + total_length >= windowsize:
+                total_interval = int(total_length / windowsize) + 1
+                total_NS += [''] * (total_interval)
+            # windowing SNPs
+            POS_set = Seq_N[CHR][0]
+            NS_set = Seq_N[CHR][1]
+            for i in range(0, len(POS_set)):
+                POS = POS_set[i] + POS_old
+                loci_POS = int(POS / windowsize)
+                if total_NS[loci_POS] == '':
+                    total_NS[loci_POS] = NS_set[i]
+            POS_old += total_length
+        N_S_set[0] += total_NS.count('N')
+        N_S_set[1] += total_NS.count('S')
+        try:
+            N_S_set[2] = N_S_set[0] / N_S_set[1]
+        except ZeroDivisionError:
+            N_S_set[2] = 'N_only'
+        Output.append('%s\t%s\t%s\t%s\t%s\t\n'%(donor_species,windowsize,
+                                                N_S_set[0],N_S_set[1],N_S_set[2]))
+
+def windowing(Seq_N):
+    for windowsize in windowsize_set:
+        N_S_set = [0, 0, 0]
+        total_NS = ['']
+        for CHR in Seq_N:
+            # calculate interval
+            try:
+                total_length = CHR.split('size')[1]
+            except IndexError:
+                total_length = CHR.split('length_')[1].split('_cov')[0]
+            total_length = int(total_length)
+            if total_length >= windowsize:
+                total_interval = int(total_length / windowsize) + 1
+                total_NS += [''] * (total_interval)
+            # windowing SNPs
+            POS_set = Seq_N[CHR][0]
+            NS_set = Seq_N[CHR][1]
+            for i in range(0, len(POS_set)):
+                POS = POS_set[i]
+                loci_POS = int(POS / windowsize)
+                if total_NS[loci_POS] == '':
+                    total_NS[loci_POS] = NS_set[i]
+        N_S_set[0] += total_NS.count('N')
+        N_S_set[1] += total_NS.count('S')
+        try:
+            N_S_set[2] = N_S_set[0] / N_S_set[1]
+        except ZeroDivisionError:
+            N_S_set[2] = 'N_only'
+        Output.append('%s\t%s\t%s\t%s\t%s\t\n'%(donor_species,windowsize,
+                                                N_S_set[0],N_S_set[1],N_S_set[2]))
+
+def readSNPfile(vcf_file):
+    Seq_N = dict()
+    for lines in open(vcf_file,'r'):
+        lines_set = lines.replace('\n', '').replace('\r', '').split('\t')
+        CHR = lines_set[0]
+        POS = int(lines_set[1])
+        N_S = lines_set[-2]
+        if 'None' not in N_S and 'S' not in N_S:
+            N_S = 'N'
+        Seq_N.setdefault(CHR,[[],[]])
+        Seq_N[CHR][0].append(POS)
+        Seq_N[CHR][1].append(N_S)
+    return Seq_N
+
+# before remove rec
+Output = []
+all_vcf_file = glob.glob(os.path.join(output_dir_merge, '*%s' % (vcf_name)))
+for vcf_file in all_vcf_file:
+    if 'BaFr_clustercluster2' not in vcf_file:
+        print(vcf_file)
+        donor_species = os.path.split(vcf_file)[-1].split(vcf_name)[0]
+        Seq_N = readSNPfile(vcf_file)
+        windowing(Seq_N)
+
+foutput = open(output_dir_merge + '/summary/all.donor.species.NSratio.txt', 'w')
+foutput.write('donor_species\twindowsize\tN\tS\tNS_ratio\t\n')
+foutput.write(''.join(Output))
+foutput.close()
+
+# after remove rec
+vcf_name = '.raw.vcf.filtered.vcf.final.snp.txt'
+Output = []
+all_vcf_file = glob.glob(os.path.join(output_dir_merge, '*%s' % (vcf_name)))
+for vcf_file in all_vcf_file:
+    if 'BaFr_clustercluster2' not in vcf_file:
+        print(vcf_file)
+        donor_species = os.path.split(vcf_file)[-1].split(vcf_name)[0]
+        Seq_N = readSNPfile(vcf_file)
+        windowing(Seq_N)
+
+foutput = open(output_dir_merge + '/summary/all.donor.species.NSratio.removerec.txt', 'w')
+foutput.write('donor_species\twindowsize\tN\tS\tNS_ratio\t\n')
+foutput.write(''.join(Output))
+foutput.close()
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# cluster ratio
+import glob
+import os
+from Bio import SeqIO
+from Bio.Seq import Seq
+
+species_list = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/species_order.new.txt'
+denovo_fasta = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/summary/all.denovo.gene.faa'
+output_list = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/cluster_ratio.txt'
+
+def split_line(lines):
+    return lines.split('\n')[0].split('\t')
+
+def find_species(record_id):
+    species = record_id.split('_')[0]
+    if species == '1':
+        species = record_id.split('_')[1]
+    return species
+
+# load all species
+All_species = dict()
+for lines in open(species_list,'r'):
+    if not lines.startswith('species_short'):
+        lines_set = split_line(lines)
+        All_species.setdefault(lines_set[2],[0,0])
+
+# load denovo fasta
+for record in SeqIO.parse(denovo_fasta, 'fasta'):
+    record_id = str(record.id)
+    All_species[find_species(record_id)][0]+=1
+
+# load clustered denovo fasta
+for record in SeqIO.parse(denovo_fasta + '.cluster.aa', 'fasta'):
+    record_id = str(record.id)
+    All_species[find_species(record_id)][1] += 1
+
+# output cluster ratio
+Output = []
+Output.append('species\tseq_before_cluster\tseq_after_cluster\tcluster_ratio\t\n')
+for species in All_species:
+    before_cluster,aftercluster = All_species[species]
+    cluster_ratio = 0
+    if aftercluster > 0:
+        cluster_ratio = before_cluster/aftercluster
+    Output.append('%s\t%s\t%s\t%s\t\n'%(species,before_cluster,aftercluster,cluster_ratio))
+
+foutput = open(output_list , 'w')
+foutput.write(''.join(Output))
+foutput.close()

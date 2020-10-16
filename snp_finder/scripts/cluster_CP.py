@@ -61,7 +61,12 @@ spetial_species = {'1_BA_IBD_1':0.6,
                    '1_BL_IBD_1':0.5,
                    '1_BL_IBD_2': 0.1,
                    '1_BA_IBD_3':0.3,
-                   'TuSa':}
+                   '2_BA_IBD_3':2.0,
+                   '2_BL_IBD_0': 0.8,
+                   '2_BL_IBD_3': 0.9,
+                   '3_BL_IBD_0': 0.5,
+                   '3_BL_IBD_1': 0.7,
+                   '3_PB_IBD_3':0.2}
 try:
     os.mkdir(output_dir)
 except IOError:

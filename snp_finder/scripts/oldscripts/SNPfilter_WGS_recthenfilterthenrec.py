@@ -32,6 +32,10 @@ optional.add_argument("-cluster",
                       help="a cluster to run, default is all clusters",
                       type=str, default='',
                       metavar='cluster1')
+optional.add_argument("-sum",
+                      help="run parsi tree and sum up all SNPs",
+                      type=str, default='None',
+                      metavar='None or True')
 # optional output setup
 optional.add_argument("-s",
                       help="a folder to store all scripts",
@@ -75,7 +79,7 @@ Allels['C']=3
 Allels_order = ['A','T','G','C']
 
 end_cutoff = 50 # contig end no SNP calling
-min_average_coverage_to_include_sample = 4 #Filter out samples have lower than that number of coverage
+min_average_coverage_to_include_sample = 5 #Filter out samples have lower than that number of coverage
 max_fraction_ambigious_samples = .4 #If more than % of the samples have ambiguous NT, discard the candidate location
 min_median_coverage_position = 3 #Remove candidate locations have lower than this coverage
 min_qual_for_call = 50 #Remove sample*candidate that has lower than this quality
@@ -84,10 +88,6 @@ min_cov_for_call_per_strand = 3 #Remove sample*candidate
 Length_cutoff = 2000 # minimum ref contig length
 Rec_length_cutoff = args.rec # maximum distance between recombination sites
 Rec_SNP_cutoff = 3 # minumum no. of SNPs grouped/clustered as a recombination
-Remove_rec_strict = False # remove strictly if True (use Contig_cutoff)
-if Remove_rec_strict:
-    Contig_cutoff = Rec_length_cutoff*2 # set Rec_SNP_cutoff -1 for contigs smaller than Rec_length_cutoff
-Round2_removerec = True # remove 2 rounds of recombination
 
 try:
     os.mkdir(args.i + '/tree')
@@ -146,7 +146,7 @@ def curate_REF(allels_set,Depth4):
     else:
         return [allels_set[0],0]
 
-def outputvcf(output_name,vcf_file_list_freq,vcf_file_list,Sample_name,vcf_file_POS):
+def outputvcf(output_name):
     vcf_file_filtered = open(vcf_file + '.%s.snpfreq.txt' % (output_name), 'w')
     vcf_file_filtered.write('CHR\tPOS\tMajor_ALT\tMinor_ALT\tGenome_set_noSNP\tGenome_set\tQuality\tGene\tGene_POS\tN_or_S\tAA_change\t%s\n'%('\t'.join(Sample_name))\
                             +''.join(vcf_file_list_freq))
@@ -161,7 +161,7 @@ def outputvcf(output_name,vcf_file_list_freq,vcf_file_list,Sample_name,vcf_file_
     vcf_file_filtered.write(''.join(vcf_file_POS))
     vcf_file_filtered.close()
 
-def outputtree(output_name,vcf_file_list_vcf,SNP_alignment,runparsi = False):
+def outputtree(output_name,runparsi = False):
     SNP_alignment_output = []
     SNP_alignment_output_parsi = []
     seq_num = 0
@@ -235,9 +235,6 @@ def causeSNP(seq,position,ALT,Reverse_chr):
 
 def loaddatabase(database):
     # load database seq
-    Ref_seq = dict()
-    Mapping = dict()
-    Mapping_loci = dict()
     Mapping = dict()
     Mapping_loci = dict()
     reference_database = os.path.split(database)[-1]
@@ -322,7 +319,7 @@ def coverage_sample(MV_cov):
             print('excluding sample %s for low coverage %s'%(samplename,depth_mean))
     return Badsample
 
-def SNP_check_all_fq(lines_set,CHR_old,POS_old,reference_name,Total,Badsamplenum,vcf_file_list,vcf_file_list_freq,vcf_file_list_vcf,vcf_file_POS,vcf_file_POS_candidate,SNP_alignment):
+def SNP_check_all_fq(lines_set,CHR_old,POS_old,reference_name,Total,Badsamplenum):
     temp_snp_line = []
     temp_snp_line_frq = []
     temp_snp_line_frq2 = []
@@ -452,7 +449,7 @@ def SNP_check_all_fq(lines_set,CHR_old,POS_old,reference_name,Total,Badsamplenum
                 SNP_alignment[genomename] += SNP_seq[j]
                 j += 1
                 i += 1
-    return [CHR_old,POS_old,vcf_file_list,vcf_file_list_freq,vcf_file_list_vcf,vcf_file_POS,vcf_file_POS_candidate,SNP_alignment]
+    return [CHR_old,POS_old]
 
 def contig_end(CHR,POS):
     try:
@@ -470,21 +467,15 @@ def contig_end(CHR,POS):
 
 def run_parsi(a_parsi_file):
     if 'RAxML_parsimonyTree' not in a_parsi_file:
-        donor_species = os.path.split(a_parsi_file)[-1]
-        input_script_sub_temp = input_script_sub + '/' + donor_species
-        try:
-            os.mkdir(input_script_sub_temp)
-        except IOError:
-            pass
         os.system('rm -rf %s %s' % (a_parsi_file + '.out.txt',
                                     a_parsi_file + '.out.tree'))
         SNP_tree_cmd3 = ('%s\n5\nV\n1\ny\n' % (a_parsi_file))
-        f1 = open(os.path.join(input_script_sub_temp, '%s.parsi.optionfile.txt'%(donor_species)), 'w')
+        f1 = open(os.path.join(input_script_sub, 'parsi.optionfile.txt'), 'w')
         f1.write(SNP_tree_cmd3)
         f1.close()
         os.system('rm -rf outfile outtree')
-        os.system('dnapars < %s/%s.parsi.optionfile.txt > %s/%s.parsi.output\n' % (
-            input_script_sub_temp, donor_species,input_script_sub_temp, donor_species))
+        os.system('dnapars < %s/parsi.optionfile.txt > %s/%s.parsi.output\n' % (
+            input_script_sub, input_script_sub, os.path.split(a_parsi_file)[-1]))
         os.system('mv outfile %s' % (a_parsi_file + '.out.txt'))
         os.system('mv outtree %s' % (a_parsi_file + '.out.tree'))
 
@@ -571,20 +562,6 @@ def compare_set(Ge_pre_set, Ge_cu_set):
 def cluster_rec(CHR_set,SNP_gen_set,CHRPOS_set):
     m = 0
     for CHR in CHR_set:
-        Rec_SNP_cutoff2 = Rec_SNP_cutoff
-        if Remove_rec_strict:
-            try:
-                total_length = int(CHR.split('size')[1])
-                Chr_long = (total_length >= Contig_cutoff)
-            except IndexError:
-                try:
-                    total_length = int(CHR.split('length_')[1].split('_cov')[0])
-                    Chr_long = (total_length >= Contig_cutoff)
-                except IndexError:
-                    Chr_num = int(CHR.split('_')[1])
-                    Chr_long = (Chr_num < 20)
-            if not Chr_long:
-                Rec_SNP_cutoff2 = Rec_SNP_cutoff -1
         potential_rec = dict()
         allCHRPOS = CHR_set[CHR]
         k = 0
@@ -617,7 +594,7 @@ def cluster_rec(CHR_set,SNP_gen_set,CHRPOS_set):
                         # output recombination
                         for Ge_pre in potential_rec:
                             allrec = potential_rec[Ge_pre]
-                            if len(allrec) >= Rec_SNP_cutoff2:
+                            if len(allrec) >= Rec_SNP_cutoff:
                                 CHRPOS_set += allrec
                         potential_rec = dict()
                     k = j - 1
@@ -625,7 +602,7 @@ def cluster_rec(CHR_set,SNP_gen_set,CHRPOS_set):
         # output the last recombination
         for Ge_pre in potential_rec:
             allrec = potential_rec[Ge_pre]
-            if len(allrec) >= Rec_SNP_cutoff2:
+            if len(allrec) >= Rec_SNP_cutoff:
                 CHRPOS_set += allrec
     return CHRPOS_set
 
@@ -638,259 +615,243 @@ def remove_rec(SNP_file,Badsamplenum_standand):
         if not lines.startswith('CHR\tPOS'):
             lines_set = lines.replace('\t\t','\t').split('\n')[0].split('\t')
             CHR = lines_set[0]
-            POS = lines_set[1]
-            CHRPOS = '%s\t%s' % (CHR, POS)
-            Ge1 = lines_set[4].replace('\"', '').split(';')
-            Ge2 = lines_set[5].replace('\"', '').split(';')
-            SNP_gen_set.setdefault(CHRPOS, [[item for item in Ge2 if item != '' and int(item) not in Badsamplenum_standand],
-                                            [item for item in Ge1 if item != '' and int(item) not in Badsamplenum_standand]])
-            NS = lines_set[9]
-            if 'NN' in NS:
-                NS = 'N'
-            CHR_set.setdefault(CHR, [])
-            CHR_set[CHR].append(CHRPOS)
+            if 'NODE_1_' in CHR:
+                POS = lines_set[1]
+                CHRPOS = '%s\t%s' % (CHR, POS)
+                Ge1 = lines_set[4].replace('\"', '').split(';')
+                Ge2 = lines_set[5].replace('\"', '').split(';')
+                SNP_gen_set.setdefault(CHRPOS, [[item for item in Ge2 if int(item) not in Badsamplenum_standand],
+                                                [item for item in Ge1 if int(item) not in Badsamplenum_standand]])
+                NS = lines_set[9]
+                if 'NN' in NS:
+                    NS = 'N'
+                CHR_set.setdefault(CHR, [])
+                CHR_set[CHR].append(CHRPOS)
+            else:
+                break
     CHRPOS_set = cluster_rec(CHR_set,SNP_gen_set,CHRPOS_set)
     return set(CHRPOS_set)
-
-def remove_rec_sum(SNP_file):
-    CHRPOS_set = []
-    CHR_set = dict()
-    SNP_gen_set = dict()
-    # import SNP info
-    for lines in open(SNP_file,'r'):
-        if not lines.startswith('CHR\tPOS'):
-            lines_set = lines.replace('\t\t','\t').split('\n')[0].split('\t')
-            CHR = lines_set[0]
-            POS = lines_set[1]
-            CHRPOS = '%s\t%s' % (CHR, POS)
-            Ge1 = lines_set[4].replace('\"', '').split(';')
-            Ge2 = lines_set[5].replace('\"', '').split(';')
-            SNP_gen_set.setdefault(CHRPOS, [Ge2,Ge1])
-            NS = lines_set[9]
-            if 'NN' in NS:
-                NS = 'N'
-            CHR_set.setdefault(CHR, [])
-            CHR_set[CHR].append(CHRPOS)
-    CHRPOS_set = cluster_rec(CHR_set,SNP_gen_set,CHRPOS_set)
-    return set(CHRPOS_set)
-
-def load_sample(vcf_file,donor_species):
-    # filter out samples with low coverage
-    print('%s remove samples with low coverage %s' % (datetime.now(), donor_species))
-    Badsample = coverage_sample(vcf_file.split(vcf_name)[0] + vcf_name + '.filtered.cov.MW.txt')
-    Badsamplenum = set()
-    Badsamplenum_standand = set()
-    Sample_name = []
-    for lines in open(vcf_file.split(vcf_name)[0] + vcf_name, 'r'):
-        if lines.startswith('##bcftoolsCommand=mpileup '):
-            # setup samples
-            sample_set = lines.split(ref_filename + ' ')[1].split('\n')[0].split(' ')
-            samplenum = 9
-            for samples in sample_set:
-                genomename = \
-                    os.path.split(samples)[-1].split(fastq_name)[0].split('all')[0].split('.sorted.bam')[0]
-                if genomename not in Badsample:
-                    Sample_name.append(genomename.replace('.', ''))
-                else:
-                    Badsamplenum.add(samplenum)
-                    Badsamplenum_standand.add(samplenum - 8)
-                samplenum += 1
-        if lines.startswith('##reference=file:'):
-            database_file = lines.split('##reference=file:')[1].split('\n')[0]
-            break
-    if database_file.split('.')[-1] != '.fna':
-        # not gene file
-        try:
-            f1 = open(database_file + '.fna', 'r')
-        except FileNotFoundError:
-            os.system('%s -q -i %s -d %s.fna' % (args.pro, database_file, database_file))
-        database_file = database_file + '.fna'
-    return [database_file,Sample_name,Badsamplenum,Badsamplenum_standand]
-
-def SNP_filter(vcf_file,CHRPOS_set,Sample_name,output_name,Badsamplenum,Tree = False):
-    vcf_file_list = []
-    vcf_file_list_freq = []
-    vcf_file_list_vcf = []
-    vcf_file_POS = []
-    vcf_file_POS_candidate = set()
-    CHR_old = ''
-    POS_old = 0
-    SNP_alignment = dict()
-    SNP_alignment.setdefault(reference_name, '')
-    Total = len(Sample_name)
-    for genomename in Sample_name:
-        SNP_alignment.setdefault(genomename, '')
-    m = 0
-    for lines in open(vcf_file, 'r'):
-        if not lines.startswith("#"):
-            lines_set = lines.split('\n')[0].split('\t')
-            CHR = lines_set[0]
-            POS = int(lines_set[1])
-            CHRPOS = '%s\t%s' % (CHR, POS)
-            if CHRPOS not in CHRPOS_set and not contig_end(CHR, POS):
-                Depth = int(lines_set[7].split('DP=')[1].split(';')[0])
-                if Depth / Total >= min_median_coverage_position:
-                    # Remove candidate locations have lower than this coverage
-                    m += 1
-                    if m % 1000 == 0:
-                        print('%s processed %s SNPs' % (datetime.now(), m))
-                    CHR_old, POS_old,vcf_file_list,vcf_file_list_freq,vcf_file_list_vcf,vcf_file_POS,vcf_file_POS_candidate,SNP_alignment = SNP_check_all_fq(lines_set,
-                                                        CHR_old, POS_old, reference_name, Total,
-                                                        Badsamplenum,vcf_file_list,vcf_file_list_freq,vcf_file_list_vcf,vcf_file_POS,vcf_file_POS_candidate,SNP_alignment)
-    outputvcf(output_name,vcf_file_list_freq,vcf_file_list,Sample_name,vcf_file_POS)
-    outputtree(output_name,vcf_file_list_vcf,SNP_alignment,Tree)
-    print('%s finished output %s' % (datetime.now(), donor_species))
 
 ################################################### Main ########################################################
 # run vcf filtering
-# merge parsi file
-if args.cluster != 'None':
-    allvcf_file = glob.glob(os.path.join(args.i, '%s*%s' % (args.cluster, args.vcf)))
-else:
-    allvcf_file = glob.glob(os.path.join(args.i, '*%s' % (args.vcf)))
+allvcf_file = glob.glob(os.path.join(args.i,'%s*%s'%(args.cluster,args.vcf)))
 print(allvcf_file)
 reference_name = reference_set[0]
 output_name = 'final'
 output_name2 = 'final.removerec'
-
 for vcf_file in allvcf_file:
-    donor_species = os.path.split(vcf_file)[-1].split('.all')[0]
-    print('processing %s %s' % (donor_species, vcf_file))
-    parsi_output = os.path.join(os.path.split(vcf_file)[0], '%s.all.parsi.fasta' % (donor_species))
     filesize = 0
     try:
-        filesize = int(os.path.getsize(parsi_output))
+        filesize = int(os.path.getsize(vcf_file + '.%s.snpfreq.txt' % (output_name2)))
     except FileNotFoundError:
         pass
     if filesize == 0:
-        print('%s start processing %s' % (datetime.now(), donor_species))
-        allvcf_filesub = [vcf_file for vcf_file in allvcf_file if donor_species in vcf_file]
-        allvcf_filesub2 = glob.glob(
-            os.path.join(args.i, '%s*%s.%s.snpfreq.txt' % (donor_species, args.vcf, output_name2)))
-        print(len(allvcf_filesub2),len(allvcf_filesub))
-        if len(allvcf_filesub2)<len(allvcf_filesub):
-            Ref_seq = dict()
-            CHRPOS_set = set()
-            Bad_set = dict()
-            for vcf_file in allvcf_filesub:
-                # remove rec
-                donor_species_sub = os.path.split(vcf_file)[-1].split(vcf_name)[0]
-                database_file, Sample_name, Badsamplenum, Badsamplenum_standand = load_sample(vcf_file, donor_species_sub)
-                Bad_set.setdefault(donor_species_sub,[Badsamplenum,Sample_name])
-                if Ref_seq == dict():
-                    Ref_seq, Mapping, Mapping_loci, Reverse = loaddatabase(database_file)
-                Total = len(Sample_name)
-                print('%s running %s genomes in %s' % (datetime.now(), Total, donor_species_sub))
-                if Round2_removerec:
-                    print('%s start removing recombination %s' % (datetime.now(), donor_species_sub))
-                    CHRPOS_set.update(remove_rec(vcf_file.split(vcf_name)[0] + vcf_name + '.filtered.snpfreq.txt',
-                                            Badsamplenum_standand))
-                    print('%s finished removing %s recombination %s' % (datetime.now(), len(CHRPOS_set),donor_species_sub))
-            for vcf_file in allvcf_filesub:
-                # SNP filtering
-                donor_species_sub = os.path.split(vcf_file)[-1].split(vcf_name)[0]
-                Badsamplenum, Sample_name = Bad_set[donor_species_sub]
-                print('%s start filtering SNPs %s' % (datetime.now(), donor_species_sub))
-                SNP_filter(vcf_file,CHRPOS_set,Sample_name,output_name,Badsamplenum,False)
-            CHRPOS_set = set()
-            for vcf_file in allvcf_filesub:
-                # remove rec round 2
-                donor_species_sub = os.path.split(vcf_file)[-1].split(vcf_name)[0]
-                Badsamplenum, Sample_name = Bad_set[donor_species_sub]
-                print('%s start removing recombination round2 %s' % (datetime.now(), donor_species_sub))
-                CHRPOS_set.update(remove_rec(vcf_file.split(vcf_name)[0] + vcf_name + '.filtered.vcf.%s.snpfreq.txt' % (output_name),[]))
-                print('%s finished removing %s recombination round2 %s' % (datetime.now(), len(CHRPOS_set), donor_species_sub))
-            for vcf_file in allvcf_filesub:
-                # SNP filtering round 2
-                donor_species_sub = os.path.split(vcf_file)[-1].split(vcf_name)[0]
-                Badsamplenum, Sample_name = Bad_set[donor_species_sub]
-                SNP_filter(vcf_file.split(vcf_name)[0] + vcf_name + '.filtered.vcf.%s.vcf' % (output_name), CHRPOS_set,Sample_name,
-                           output_name2,[], True)
-                print('%s finished output round 2 %s' % (datetime.now(), donor_species_sub))
-        allvcf_filesub = glob.glob(os.path.join(args.i, '%s*%s.%s.snpfreq.txt' % (donor_species, args.vcf, output_name2)))
-        print('%s start parsing all SNPs %s' % (datetime.now(), donor_species))
-        print(allvcf_filesub)
-        vcf_sample = dict()
-        SNP_alignment = dict()
-        allsamplename = []
-        # load all samplename
-        print('%s load all samples %s' % (datetime.now(), donor_species))
-        for a_vcf_file in allvcf_filesub:
-            samplefile = a_vcf_file.replace('.snpfreq.txt', '.samplename.txt')
-            vcf_sample.setdefault(a_vcf_file, [])
-            for lines in open(samplefile, 'r'):
-                sample_set = lines.split('\n')[0].split('\t')
-                vcf_sample[a_vcf_file] += sample_set
-                allsamplename += sample_set
-                for genomename in sample_set:
-                    SNP_alignment.setdefault(genomename, '')
-        # load all SNPs and POSs
-        print('%s load all SNPs %s' % (datetime.now(), donor_species))
-        SNP_info = dict()
-        SNP_sample = dict()
-        for a_vcf_file in allvcf_filesub:
-            for lines in open(a_vcf_file.replace('.snpfreq.txt', '.vcf')):
-                lines_set = lines.split('\n')[0].split('\t')
-                CHR, POS, NOTUSE, Ref, ALT = lines_set[0:5]
-                CHRPOS = '%s\t%s' % (CHR, POS)
-                SNP_info.setdefault(CHRPOS, [Ref, '', set()])
-            for lines in open(a_vcf_file, 'r'):
-                if not lines.startswith('CHR'):
+        donor_species = os.path.split(vcf_file)[-1].split(vcf_name)[0]
+        vcf_file_list = []
+        vcf_file_list_freq = []
+        vcf_file_list_vcf = []
+        Sample_name = []
+        vcf_file_POS = []
+        vcf_file_POS_candidate = set()
+        Ref_seq = dict()
+        Mapping = dict()
+        Mapping_loci = dict()
+        CHR_old = ''
+        POS_old = 0
+        # filter out samples with low coverage
+        print('%s remove samples with low coverage %s' % (datetime.now(), donor_species))
+        Badsample = coverage_sample(vcf_file.split(vcf_name)[0] + vcf_name + '.filtered.cov.MW.txt')
+        Badsamplenum = set()
+        Badsamplenum_standand = set()
+        for lines in open(vcf_file.split(vcf_name)[0] + vcf_name, 'r'):
+            if lines.startswith('##bcftoolsCommand=mpileup '):
+                # setup samples
+                sample_set = lines.split(ref_filename + ' ')[1].split('\n')[0].split(' ')
+                samplenum = 9
+                for samples in sample_set:
+                    genomename = os.path.split(samples)[-1].split(fastq_name)[0].split('all')[0].split('.sorted.bam')[0]
+                    if genomename not in Badsample:
+                        Sample_name.append(genomename.replace('.', ''))
+                    else:
+                        Badsamplenum.add(samplenum)
+                        Badsamplenum_standand.add(samplenum-8)
+                    samplenum += 1
+            if lines.startswith('##reference=file:'):
+                database_file = lines.split('##reference=file:')[1].split('\n')[0]
+                break
+        if database_file.split('.')[-1] != '.fna':
+            # not gene file
+            try:
+                f1 = open(database_file + '.fna', 'r')
+            except FileNotFoundError:
+                os.system('%s -q -i %s -d %s.fna' % (args.pro, database_file, database_file))
+            database_file = database_file + '.fna'
+        Ref_seq, Mapping, Mapping_loci, Reverse = loaddatabase(database_file)
+        Total = len(Sample_name)
+        filesize = 0
+        try:
+            filesize = int(os.path.getsize(vcf_file + '.%s.snpfreq.txt' % (output_name)))
+        except FileNotFoundError:
+            pass
+        if filesize == 0:
+            print('%s running %s genomes in %s' % (datetime.now(), Total, donor_species))
+            print('%s start removing recombination %s' % (datetime.now(), donor_species))
+            CHRPOS_set = remove_rec(vcf_file.split(vcf_name)[0] + vcf_name + '.filtered.snpfreq.txt',
+                                    Badsamplenum_standand)
+            print('%s finished removing recombination %s' % (datetime.now(), donor_species))
+            print('%s start filtering SNPs %s' % (datetime.now(), donor_species))
+            vcf_file_list = []
+            vcf_file_list_freq = []
+            vcf_file_list_vcf = []
+            vcf_file_POS = []
+            vcf_file_POS_candidate = set()
+            SNP_alignment = dict()
+            SNP_alignment.setdefault(reference_name, '')
+            CHR_old = ''
+            POS_old = 0
+            Total = len(Sample_name)
+            for genomename in Sample_name:
+                SNP_alignment.setdefault(genomename, '')
+            m = 0
+            for lines in open(vcf_file + '', 'r'):
+                if not lines.startswith("#"):
                     lines_set = lines.split('\n')[0].split('\t')
-                    CHR, POS, Ref, ALT = lines_set[0:4]
-                    ALT = ALT.split(',')
-                    CHRPOS = '%s\t%s' % (CHR, POS)
-                    Gene_info = '\t'.join(lines_set[7:9])
-                    N_or_S = lines_set[9]
-                    SNP_info[CHRPOS][1] = Gene_info
-                    SNP_sample.setdefault(CHRPOS, [[], []])
-                    samplelist_genotype, genotype_set = findSNP_sample(lines_set[11:], vcf_sample[a_vcf_file])
-                    for minor_ALT in list(set(genotype_set)):
-                        if minor_ALT != Ref and minor_ALT != '-':
-                            if N_or_S == 'None':
-                                SNP_info[CHRPOS][-1].add(N_or_S)
-                            else:
-                                SNP_info[CHRPOS][-1].add(N_or_S[ALT.index(minor_ALT)])
-                    SNP_sample[CHRPOS][0] += samplelist_genotype
-                    SNP_sample[CHRPOS][1] += genotype_set
-        print('%s sum up all SNPs %s' % (datetime.now(), donor_species))
-        # summarize parsi seq
-        alloutput = []
-        alloutput.append(
-            'CHR\tPOS\tMajor_ALT\tMinor_ALT\tN_or_S\tGene\tGene_POS\tGenome_set_noSNP\tGenome_SNP_set\t%s\n' % (
-                '\t'.join(allsamplename)))
-        for CHRPOS in SNP_info:
-            Ref, Gene_info, N_or_S = SNP_info[CHRPOS]
-            samplelist_genotype, genotype_set = SNP_sample[CHRPOS]
-            Major, Minor = find_major(genotype_set + [Ref] * (len(SNP_alignment) - len(samplelist_genotype)))
-            Genome_set_noSNP = []
-            Genome_set_SNP = []
-            temp_line = '%s\t%s\t%s\t%s\t%s' % (CHRPOS, Major, Minor, ','.join(list(N_or_S)), Gene_info)
-            temp_line2 = ''
-            i = 1
-            for genomename in SNP_alignment:
-                if genomename in samplelist_genotype:
-                    ALT = genotype_set[samplelist_genotype.index(genomename)]
-                else:
-                    # not significantly different than Ref
-                    ALT = Ref
-                if ALT in [Major, '-']:
-                    ALT = Major
-                    Genome_set_noSNP.append(str(i))
-                else:
-                    Genome_set_SNP.append(str(i))
-                temp_line2 += '\t%s' % (ALT)
-                SNP_alignment[genomename] += ALT
-                i += 1
-            alloutput.append(
-                temp_line + '\t%s\t%s' % (';'.join(Genome_set_noSNP), ';'.join(Genome_set_SNP)) + temp_line2 + '\n')
-        outputtree_parsi(parsi_output)
-        print('finished processing %s' % (donor_species))
-        print('run parsi tree for %s' % (donor_species))
-        run_parsi(parsi_output)
-        # run parsi tree
-        os.system('mv %s/%s*.parsi.fasta.out* %s/tree/' % (
-            args.i,donor_species, args.i))
+                    CHR = lines_set[0]
+                    if 'NODE_1_' in CHR:
+                        POS = int(lines_set[1])
+                        CHRPOS = '%s\t%s' % (CHR, POS)
+                        if CHRPOS not in CHRPOS_set and not contig_end(CHR, POS):
+                            Depth = int(lines_set[7].split('DP=')[1].split(';')[0])
+                            if Depth / Total >= min_median_coverage_position:
+                                # Remove candidate locations have lower than this coverage
+                                m += 1
+                                if m % 1000 == 0:
+                                    print('%s processed %s SNPs' % (datetime.now(), m))
+                                CHRPOS = '%s\t%s' % (CHR, POS)
+                                CHR_old, POS_old = SNP_check_all_fq(lines_set,
+                                                                    CHR_old, POS_old, reference_name, Total, Badsamplenum)
+                    else:
+                        break
+            outputvcf(output_name)
+            outputtree(output_name,True)
+            print('%s finished output %s' % (datetime.now(), donor_species))
+        print('%s start removing recombination %s' % (datetime.now(), donor_species))
+        CHRPOS_set = remove_rec(vcf_file.split(vcf_name)[0] + vcf_name + '.filtered.vcf.%s.snpfreq.txt' % (output_name),[])
+        print('%s finished removing recombination %s' % (datetime.now(), donor_species))
+        vcf_file_list = []
+        vcf_file_list_freq = []
+        vcf_file_list_vcf = []
+        vcf_file_POS = []
+        vcf_file_POS_candidate = set()
+        SNP_alignment = dict()
+        SNP_alignment.setdefault(reference_name, '')
+        CHR_old = ''
+        POS_old = 0
+        for genomename in Sample_name:
+            SNP_alignment.setdefault(genomename, '')
+        m = 0
+        for lines in open(vcf_file.split(vcf_name)[0] + vcf_name + '.filtered.vcf.%s.vcf' % (output_name), 'r'):
+            if not lines.startswith("#"):
+                lines_set = lines.split('\n')[0].split('\t')
+                CHR = lines_set[0]
+                POS = int(lines_set[1])
+                CHRPOS = '%s\t%s' % (CHR, POS)
+                if CHRPOS not in CHRPOS_set:
+                    m += 1
+                    if m % 1000 == 0:
+                        print('%s processed %s SNPs' % (datetime.now(), m))
+                    CHR_old, POS_old = SNP_check_all_fq(lines_set,
+                                                        CHR_old, POS_old, reference_name, Total, [])
+        outputvcf(output_name2)
+        outputtree(output_name2, True)
+        print('%s finished output %s' % (datetime.now(), donor_species))
 
+# merge parsi file
+if args.sum != 'None':
+    allvcf_file = glob.glob(os.path.join(args.i,'*%s.%s.snpfreq.txt'%(args.vcf,output_name)))
+    for vcf_file in allvcf_file:
+        donor_species = os.path.split(vcf_file)[-1].split('.all')[0]
+        print('processing %s %s' % (donor_species, vcf_file))
+        parsi_output = os.path.join(os.path.split(vcf_file)[0],'%s.all.parsi.fasta'%(donor_species))
+        filesize = 0
+        try:
+            filesize = int(os.path.getsize(parsi_output))
+        except FileNotFoundError:
+            pass
+        if filesize == 0:
+            print('start processing %s' % (donor_species))
+            allvcf_filesub = [vcf_file for vcf_file in allvcf_file if donor_species in vcf_file]
+            vcf_sample = dict()
+            SNP_alignment = dict()
+            allsamplename = []
+            # load all samplename
+            for a_vcf_file in allvcf_filesub:
+                samplefile = a_vcf_file.replace('.snpfreq.txt','.samplename.txt')
+                vcf_sample.setdefault(a_vcf_file,[])
+                for lines in open(samplefile,'r'):
+                    sample_set = lines.split('\n')[0].split('\t')
+                    vcf_sample[a_vcf_file] += sample_set
+                    allsamplename += sample_set
+                    for genomename in sample_set:
+                        SNP_alignment.setdefault(genomename, '')
+            # load all SNPs and POSs
+            SNP_info = dict()
+            SNP_sample = dict()
+            for a_vcf_file in allvcf_filesub:
+                for lines in open(a_vcf_file.replace('.snpfreq.txt','.vcf')):
+                    lines_set = lines.split('\n')[0].split('\t')
+                    CHR, POS, NOTUSE, Ref, ALT = lines_set[0:5]
+                    CHRPOS = '%s\t%s' % (CHR, POS)
+                    SNP_info.setdefault(CHRPOS, [Ref, '', set()])
+                for lines in open(a_vcf_file, 'r'):
+                    if not lines.startswith('CHR'):
+                        lines_set = lines.split('\n')[0].split('\t')
+                        CHR, POS, Ref, ALT = lines_set[0:4]
+                        ALT = ALT.split(',')
+                        CHRPOS = '%s\t%s' % (CHR, POS)
+                        Gene_info = '\t'.join(lines_set[7:9])
+                        N_or_S = lines_set[9]
+                        SNP_info[CHRPOS][1] = Gene_info
+                        SNP_sample.setdefault(CHRPOS, [[], []])
+                        samplelist_genotype, genotype_set = findSNP_sample(lines_set[11:], vcf_sample[a_vcf_file])
+                        for minor_ALT in list(set(genotype_set)):
+                            if minor_ALT != Ref and minor_ALT != '-':
+                                SNP_info[CHRPOS][-1].add(N_or_S[ALT.index(minor_ALT)])
+                        SNP_sample[CHRPOS][0] += samplelist_genotype
+                        SNP_sample[CHRPOS][1] += genotype_set
+            # summarize parsi seq
+            alloutput = []
+            alloutput.append('CHR\tPOS\tMajor_ALT\tMinor_ALT\tN_or_S\tGene\tGene_POS\tGenome_set_noSNP\tGenome_SNP_set\t%s\n'%('\t'.join(allsamplename)))
+            for CHRPOS in SNP_info:
+                Ref, Gene_info,N_or_S = SNP_info[CHRPOS]
+                samplelist_genotype, genotype_set = SNP_sample[CHRPOS]
+                Major, Minor = find_major(genotype_set + [Ref]* (len(SNP_alignment)-len(samplelist_genotype)))
+                Genome_set_noSNP = []
+                Genome_set_SNP = []
+                temp_line = '%s\t%s\t%s\t%s\t%s'%(CHRPOS,Major,Minor,','.join(list(N_or_S)),Gene_info)
+                temp_line2 = ''
+                i = 1
+                for genomename in SNP_alignment:
+                    if genomename in samplelist_genotype:
+                        ALT = genotype_set[samplelist_genotype.index(genomename)]
+                    else:
+                        # not significantly different than Ref
+                        ALT = Ref
+                    if ALT in [Major, '-']:
+                        ALT = Major
+                        Genome_set_noSNP.append(str(i))
+                    else:
+                        Genome_set_SNP.append(str(i))
+                    temp_line2 += '\t%s' % (ALT)
+                    SNP_alignment[genomename] += ALT
+                    i += 1
+                alloutput.append(temp_line + '\t%s\t%s'%(';'.join(Genome_set_noSNP),';'.join(Genome_set_SNP)) + temp_line2 + '\n')
+            outputtree_parsi(parsi_output)
+            print('finished processing %s' % (donor_species))
+            print('run parsi tree for %s' % (donor_species))
+            run_parsi(parsi_output)
+    # run parsi tree
+    os.system('mv %s/*.parsi.fasta.out* %s/tree/' % (
+        args.i, args.i))
 
 

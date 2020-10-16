@@ -22,6 +22,7 @@ mutation_fasta = os.path.join(mutation_dir,'all.denovo.gene.faa')
 output_dir = args.o + '/pangenome'
 allresult = glob.glob(os.path.join(output_dir,'*.denovo.txt'))
 core_cutoff = 0.8
+core_cutoff_species_num = 15
 # load diamond results
 def load_result(file,speciesname,genomename,Gene,Gene_copy,alloutput):
     resultset = []
@@ -65,6 +66,7 @@ for geneID in Gene_select:
 
 # summarize all genomes for a species
 Species = dict()
+Species_set = set()
 try:
     f1 = open(mutation_fasta + '.allpangenome.txt','r')
     Gene_temp = dict()
@@ -72,26 +74,19 @@ try:
         if not lines.startswith('#'):
             lines_set = lines.split('\n')[0].split('\t')
             geneID,genomename,speciesname = lines_set[0:3]
-            if '_g' in speciesname and '.denovo.txt' in speciesname: # fix Parabacteroides
-                speciesname = speciesname.split('_')[1]
             Species.setdefault(speciesname, set())
             Species[speciesname].add(genomename)
             Gene_temp.setdefault(geneID, set())
             Gene_temp[geneID].add(genomename)
             Gene_copy[geneID].append(speciesname)
+            Species_set.add(speciesname)
     for geneID in Gene_temp:
         for genomename in Gene_temp[geneID]:
             genomename_set = genomename.split('_')
-            speciesname = genomename_set[1] + '_' + genomename_set[2]
-            if genomename_set[1] in ['BA', 'BL', 'PB']:
-                if genomename_set[1] == 'BA':
-                    speciesname = 'Bifidobacterium_adolescentis'
-                elif genomename_set[1] == 'BL':
-                    speciesname = 'Bifidobacterium_longum'
-                elif genomename_set[1] == 'PB':
-                    speciesname = 'Parabacteroides_butyrate'
-            if genomename_set[2].startswith('_g'):
-                speciesname = genomename_set[1]
+            speciesname = genomename_set[1].replace('.', '').replace('Parabacteroides', 'PB')
+            if genomename.startswith('Bfrag') or speciesname in ['Bact', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7',
+                                                                 'T8']:
+                speciesname = 'BaFr'
             Gene[geneID].append(speciesname)
 except IOError:
     alloutput = []
@@ -99,27 +94,21 @@ except IOError:
     for resultfile in allresult:
         genomename = os.path.split(resultfile)[-1].split('.faa.selected.txt')[0]
         genomename_set = genomename.split('_')
-        speciesname = genomename_set[1]+'_'+genomename_set[2]
-        if genomename_set[1] in ['BA','BL','PB']:
-            if genomename_set[1] == 'BA':
-                speciesname = 'Bifidobacterium_adolescentis'
-            elif genomename_set[1] == 'BL':
-                speciesname = 'Bifidobacterium_longum'
-            elif genomename_set[1] == 'PB':
-                speciesname = 'Parabacteroides_butyrate'
-        if genomename_set[2].startswith('_g'):
-            speciesname = genomename_set[1]
+        speciesname = genomename_set[1].replace('.','').replace('Parabacteroides','PB')
+        if genomename.startswith('Bfrag') or speciesname in ['Bact','T1','T2','T3','T4','T5','T6','T7','T8']:
+            speciesname = 'BaFr'
         Species.setdefault(speciesname,set())
         Species[speciesname].add(genomename)
         Gene,Gene_copy,alloutput = load_result(resultfile,speciesname,genomename,Gene,Gene_copy,alloutput)
+        Species_set.add(speciesname)
     f1 = open(mutation_fasta + '.allpangenome.txt','w')
     f1.write(''.join(alloutput))
     f1.close()
+print(Species_set)
 
 # summarize gene distribution in a species
 #allsummary = []
 allsummary2 = set()
-allsummary2.add('#geneID\tspecies\tgene_length\tgenome_percentage\tavg_copy_num\tselected\t\n')
 geneID_list = 'Species\tTotalgenome'
 for geneID in Gene:
     geneID_list += '\t%s'%(geneID)
@@ -135,10 +124,17 @@ for speciesname in Species:
         Percentage = Totalgenome_geneID/Totalgenome
         Percentage_copy = Totalcopy_geneID/Totalgenome
         geneID_list += '\t%.3f' % (Percentage)
-        if Percentage >= core_cutoff:
-            Gene_summary[geneID].add('core')
-        elif Percentage > 0:
-                Gene_summary[geneID].add('flexible')
+        if speciesname in geneID:
+            # same species
+            if Percentage >= core_cutoff:
+                Gene_summary[geneID].add('origin_core')
+            elif Percentage > 0:
+                    Gene_summary[geneID].add('origin_flexible')
+        else:
+            if Percentage >= core_cutoff:
+                Gene_summary[geneID].add('other_core')
+            elif Percentage > 0:
+                    Gene_summary[geneID].add('other_flexible')
         if geneID in Gene_select:
             tag = 'selected'
         else:
@@ -150,6 +146,7 @@ for speciesname in Species:
     #allsummary.append(geneID_list)
 
 Gene_summary_output=[]
+Gene_summary_output.append('#geneID\tspecies_num\tselected\tmultispecies\tspecies_list\tcore_or_flexible\t')
 for geneID in Gene:
     allspecies = Gene[geneID]
     allspecies_unique = list(set(allspecies))
@@ -164,6 +161,17 @@ for geneID in Gene:
     else:
         tempoutput += ('singlespecies\t')
     tempoutput += ';'.join(allspecies_unique) + '\t'
+    if 'origin_flexible' in Gene_summary[geneID]:
+        tag = 'species_flexible'
+    elif 'origin_core' in Gene_summary[geneID]:
+        if Totalspecies >= core_cutoff_species_num and 'other_core' in Gene_summary[geneID]:
+            # potential core gene
+            tag = 'all_core'
+        else:
+            tag = 'origin_core'
+    else:
+        tag = 'other'
+    tempoutput += tag + '\t'
     for tag in Gene_summary[geneID]:
         tempoutput += '%s\t'%(tag)
     Gene_summary_output.append(tempoutput)
@@ -172,6 +180,7 @@ for geneID in Gene:
 f1 = open(mutation_fasta + '.allpangenome.sum.txt','w')
 f1.write('\n'.join(Gene_summary_output))
 f1.close()
-f1 = open(mutation_fasta + '.allpangenome.sum.3.txt','w')
-f1.write(''.join(list(allsummary2)))
+
+f1 = open(mutation_fasta + '.allpangenome.sum.species.txt','w')
+f1.write('#geneID\tspecies\tgene_length\tgenome_percentage\tavg_copy_num\tselected\t\n' + ''.join(list(allsummary2)))
 f1.close()

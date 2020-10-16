@@ -1,5 +1,6 @@
 #---------------------------------------- pan-genome ----------------------------------------
 # extract genomes for pan-genomes
+# roary identity 80 cd 90
 input_script = '/scratch/users/anniz44/scripts/1MG/pan-genome'
 input_script_sub = '/scratch/users/anniz44/scripts/1MG/pan-genome/roary'
 output_dir = '/scratch/users/anniz44/genomes/pan-genome'
@@ -122,6 +123,8 @@ f1 = open(os.path.join(input_script,'copy.sh'),'w')
 f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(''.join(cmds)))
 f1.close()
 
+################################################### END ########################################################
+################################################### SET PATH ########################################################
 #flexible gneome selection
 import glob
 import os
@@ -308,6 +311,8 @@ output_file.close()
 #    print(species, pan_genome_fa,accessory_tab)
 #    os.system('mv %s %s/'%(os.path.join(output_dir,'%s_%s'%(species,'flexible.genome.fa')),os.path.join(output_dir,'Jay_Bacteroides_%s_%s'%(species,'flexible.genome.fa'))))
 
+################################################### END ########################################################
+################################################### SET PATH ########################################################
 # cluster genes
 import os
 import glob
@@ -341,6 +346,8 @@ f1 = open(os.path.join(input_script, 'all.pan-genome.usearch.sh'),'w')
 f1.write('#!/bin/bash\nsource ~/.bashrc\n'+cmd)
 f1.close()
 
+################################################### END ########################################################
+################################################### SET PATH ########################################################
 
 # filter out functions carried by multiple species
 import glob
@@ -348,6 +355,7 @@ import os
 from Bio import SeqIO
 from Bio.Seq import Seq
 
+cutoff_multispecies = 1
 input_script = '/scratch/users/anniz44/scripts/1MG/pan-genome'
 output_dir = '/scratch/users/anniz44/genomes/pan-genome/allpangenome/sumsub'
 
@@ -387,7 +395,7 @@ output_file = open(os.path.join(output_dir, 'all.flexible.genome.multispecies.by
 output_annotation = []
 for geneID in Cluster:
     number_species = len(Cluster[geneID])
-    if number_species > 1:
+    if number_species > cutoff_multispecies:
         Candidate_geneID.add(geneID)
         output_annotation.append('%s\t%s\t%s\t%s\n'%(geneID,Annotation[geneID][1], number_species,';'.join(Cluster[geneID])))
 
@@ -413,7 +421,8 @@ for fasta_files in glob.glob(os.path.join(output_dir,'*cluster.aa')) + glob.glob
     output_file.write(''.join(multi_species_fasta))
     output_file.close()
 
-
+################################################### END ########################################################
+################################################### SET PATH ########################################################
 # Jay pangenome
 import glob
 import os
@@ -511,6 +520,8 @@ for sub_scripts in glob.glob(os.path.join(input_script + '/Jay_prokka', '*.prokk
 
 f1.close()
 
+################################################### END ########################################################
+################################################### SET PATH ########################################################
 # metagenomes running
 import os
 import glob
@@ -534,6 +545,8 @@ output_file.close()
 os.system('mv %s %s/.old' %(fasta_file,fasta_file))
 os.system('mv %s.nom.fasta %s' %(fasta_file,fasta_file))
 
+################################################### END ########################################################
+################################################### SET PATH ########################################################
 import os
 import glob
 from Bio import SeqIO
@@ -556,6 +569,8 @@ output_file.close()
 os.system('mv %s %s/.old' %(fasta_file,fasta_file))
 os.system('mv %s.nom.fasta %s' %(fasta_file,fasta_file))
 
+################################################### END ########################################################
+################################################### SET PATH ########################################################
 # metagenomes enriched genes
 #from matplotlib import style
 import os
@@ -653,6 +668,9 @@ all_avg_result.columns = colnames
 all_avg_result.to_csv(summary_filename + '.sumenv.txt', sep='\t',
               header=True)
 
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+
 # R first then upload file */*enrich
 # pick up enriched genes
 import os
@@ -711,7 +729,14 @@ output_file = open(fasta_file + '.enriched.human.length','w')
 output_file.write(''.join(output_file2_set))
 output_file.close()
 
-# gene selected percentage
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# annotate all fasta
+# sh /scratch/users/anniz44/scripts/1MG/pan-genome/annotate.sh
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+
+# gene selected percentage old
 import os
 import glob
 from Bio import SeqIO
@@ -886,6 +911,9 @@ output_file.write('#enriched_SNP_ratio\tenriched_length_ratio\tnon_enriched_SNP_
                                         Enriched[0]/Enriched[1],Not_enriched[0]/Not_enriched[1],
                                         Enriched[0] / Enriched[1]/Not_enriched[0]* Not_enriched[1]))
 output_file.close()
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+
 # clean up
 import os
 os.system('#rm -rf /scratch/users/anniz44/genomes/Jay/data')

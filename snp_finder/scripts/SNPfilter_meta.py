@@ -41,6 +41,10 @@ optional.add_argument("-o",
 args = parser.parse_args()
 # setup path all clonal population
 output_dir = args.o + '/MG/bwa'
+try:
+    os.mkdir(output_dir + '/finished')
+except IOError:
+    pass
 ################################################### Set up ########################################################
 # set up cutoff
 Gene_cov_cutoff = 0.75 # coverage of a gene to count as mapped
@@ -125,8 +129,9 @@ for vcf_file in all_vcf_file:
         if not lines.startswith("#"):
             vcf_to_depth(lines)
     process_donor_species(Donorspecies_sample,donorspecies)
+    os.system('mv %s %s/finished/'%(vcf_file,output_dir))
 
-f1 = open(os.path.join(output_dir + '/../', 'MG.abu.sum.txt'),'w')
+f1 = open(os.path.join(output_dir + '/../', 'MG.abu.sum.txt'),'a')
 f1.write(''.join(Coverage))
 f1.close()
 

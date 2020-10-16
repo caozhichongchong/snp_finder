@@ -70,7 +70,7 @@ Allels['C']=3
 Allels_order = ['A','T','G','C']
 
 Length_cutoff = 2000 # minimum ref contig length
-Rec_length_cutoff = 50000 # maximum distance between recombination sites
+Rec_length_cutoff = 5000 # maximum distance between recombination sites
 Rec_SNP_cutoff = 3 # minumum no. of SNPs grouped/clustered as a recombination
 end_cutoff = 50 # contig end no SNP calling
 
@@ -384,34 +384,43 @@ def dis_pos(current_CHRPOS,pre_CHRPOS):
     return POS2 - POS1
 
 def match(Ge_preset,Ge_cuset):
-    Ge_preset = Ge_preset.split(';')
-    Ge_cuset = Ge_cuset.split(';')
+    if Ge_preset == Ge_cuset:
+        return True
+    Ge_preset = set(Ge_preset)
     if ((len(Ge_preset) >= 5 and len(Ge_cuset) >= 3) or (len(Ge_preset) >= 3 and len(Ge_cuset) >= 5)):
         #return all(elem in Ge_cuset for elem in Ge_preset) or all(elem in Ge_preset for elem in Ge_cuset)
-        return len([elem for elem in Ge_cuset if elem in Ge_preset]) >= len(Ge_cuset) - 2 or \
-               len([elem for elem in Ge_preset if elem in Ge_cuset]) >= len(Ge_preset) - 2
-    else:
-        return Ge_cuset == Ge_preset
+        return len([elem for elem in Ge_cuset if elem in Ge_preset]) >= min(len(Ge_cuset) - 2,len(Ge_preset) - 2)
+
+def join_set(Ge):
+    return ';'.join(Ge)
 
 def compare_set(Ge_pre_set, Ge_cu_set):
     if (match(Ge_pre_set[0],Ge_cu_set[0]) and match(Ge_pre_set[1],Ge_cu_set[1])):
-        return [[Ge_pre_set[0],Ge_cu_set[0]],[Ge_pre_set[1],Ge_cu_set[1]]]
+        return [[join_set(Ge_pre_set[0]),join_set(Ge_cu_set[0])],
+                [join_set(Ge_pre_set[1]), join_set(Ge_cu_set[1])]]
     elif  (match(Ge_pre_set[0], Ge_cu_set[1]) and match(Ge_pre_set[1], Ge_cu_set[0])):
-        return [[Ge_pre_set[0], Ge_cu_set[1]], [Ge_pre_set[1], Ge_cu_set[0]]]
+        return [[join_set(Ge_pre_set[0]), join_set(Ge_cu_set[1])],
+                [join_set(Ge_pre_set[1]), join_set(Ge_cu_set[0])]]
     else:
         return []
 
 def cluster_rec(CHR_set,SNP_gen_set,CHRPOS_set):
+    m = 0
     for CHR in CHR_set:
         potential_rec = dict()
         allCHRPOS = CHR_set[CHR]
         k = 0
         for i in range(1,len(allCHRPOS)):
             current_CHRPOS = allCHRPOS[i]
+            Ge_cu_set = SNP_gen_set[current_CHRPOS]
+            if current_CHRPOS == 'NODE_1_length_776372_cov_26.524923\t315465':
+                print(Ge_cu_set)
+            m += 1
+            if m%1000 == 0:
+                print('%s removed recombination of %s SNPs' % (datetime.now(), m))
             for j in reversed(range(k, i)):
                 pre_CHRPOS = allCHRPOS[j]
                 Ge_pre_set = SNP_gen_set[pre_CHRPOS]
-                Ge_cu_set = SNP_gen_set[current_CHRPOS]
                 Dis = dis_pos(current_CHRPOS,pre_CHRPOS)
                 if Dis <= Rec_length_cutoff:
                     matchresult = compare_set(Ge_pre_set, Ge_cu_set)
@@ -420,21 +429,26 @@ def cluster_rec(CHR_set,SNP_gen_set,CHRPOS_set):
                         for matchresult_set in matchresult:
                             # cluster rec sites
                             Ge_pre,Ge_cu = matchresult_set
+                            if Ge_pre == ['38'] or Ge_cu == ['38']:
+                                print(current_CHRPOS,pre_CHRPOS)
                             potential_rec.setdefault(Ge_pre, set())
                             potential_rec[Ge_pre].add(current_CHRPOS)
                             potential_rec[Ge_pre].add(pre_CHRPOS)
                             potential_rec.setdefault(Ge_cu, set())
                             potential_rec[Ge_cu].update(list(potential_rec[Ge_pre]))
                             potential_rec[Ge_pre].update(list(potential_rec[Ge_cu]))
+                        break
                 else:
                     if j == i - 1:
                         # output recombination
                         for Ge_pre in potential_rec:
                             allrec = potential_rec[Ge_pre]
+                            if Ge_pre == ['38']:
+                                print(allrec)
                             if len(allrec) >= Rec_SNP_cutoff:
                                 CHRPOS_set += allrec
                         potential_rec = dict()
-                        k = j - 1
+                    k = j - 1
                     break
         # output the last recombination
         for Ge_pre in potential_rec:
@@ -451,18 +465,19 @@ def remove_rec(SNP_file):
     for lines in open(SNP_file,'r'):
         lines_set = lines.replace('\t\t','\t').split('\n')[0].split('\t')
         CHR = lines_set[0]
-        POS = lines_set[1]
-        CHRPOS = '%s\t%s' % (CHR, POS)
-        Ge1 = lines_set[4]
-        Ge2 = lines_set[5]
-        SNP_gen_set.setdefault(CHRPOS, [Ge2,Ge1])
-        NS = lines_set[9]
-        if 'NN' in NS:
-            NS = 'N'
-        CHR_set.setdefault(CHR, [])
-        CHR_set[CHR].append(CHRPOS)
+        if CHR == 'NODE_1_length_776372_cov_26.524923':
+            POS = lines_set[1]
+            CHRPOS = '%s\t%s' % (CHR, POS)
+            Ge1 = lines_set[4].replace('\"', '').split(';')
+            Ge2 = lines_set[5].replace('\"', '').split(';')
+            SNP_gen_set.setdefault(CHRPOS, [Ge2, Ge1])
+            NS = lines_set[9]
+            if 'NN' in NS:
+                NS = 'N'
+            CHR_set.setdefault(CHR, [])
+            CHR_set[CHR].append(CHRPOS)
     CHRPOS_set = cluster_rec(CHR_set,SNP_gen_set,CHRPOS_set)
-    return list(set(CHRPOS_set))
+    return set(CHRPOS_set)
 
 ################################################### Main ########################################################
 # run vcf filtering

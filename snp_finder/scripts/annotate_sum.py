@@ -19,8 +19,9 @@ args = parser.parse_args()
 output_dir_merge = args.o
 database_metacyc = '/scratch/users/mit_alm/database/metacyc/genes.col'
 database_eggnog = '/scratch/users/mit_alm/database/eggnog/2_annotations.tsv'
+database_eggnog2 = '/scratch/users/mit_alm/database/eggnog/COG_catogary.txt'
 database_kegg = '/scratch/users/anniz44/scripts/database/Kegg/ko_formated'
-all_fasta_set = glob.glob(os.path.join(output_dir_merge + '/summary', '*.faa'))
+all_fasta_set = glob.glob(os.path.join(output_dir_merge + '/summary', '*.cluster.aa'))
 
 # function annotation
 def best_hit(Blast_output,small = 0):
@@ -214,7 +215,7 @@ def sum_kegg_eggnog(Blast_outputkegg,DB_namekegg,Blast_outputegg,DB_nameegg,Clus
         for db_name in Blast_outputkegg[gene_name]:
             if db_name in DB_namekegg:
                 Output.append('%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(cluster,donor,species,donor_species,gene_name,db_name,DB_namekegg[db_name]))
-    f1 = open(all_fasta + '.cluster.aa.kegg.sum','w')
+    f1 = open(all_fasta + '.kegg.sum','w')
     f1.write('cluster\tdonor\tspecies\tdonor_species\tgene_name\tKO\tBRITE_KO1\tBRITE_KO2\tBRITE_KO3\n' + ''.join(Output))
     f1.close()
     Output = []
@@ -231,7 +232,7 @@ def sum_kegg_eggnog(Blast_outputkegg,DB_namekegg,Blast_outputegg,DB_nameegg,Clus
             if db_name in DB_nameegg:
                 Output.append('%s\t%s\t%s\t%s\t%s\t%s\t%s\n' % (
                 cluster, donor, species, donor_species, gene_name, db_name, DB_nameegg[db_name]))
-    f1 = open(all_fasta + '.cluster.aa.eggnog.sum', 'w')
+    f1 = open(all_fasta + '.eggnog.sum', 'w')
     f1.write(
         'cluster\tdonor\tspecies\tdonor_species\tgene_name\tEGGNOG\tannotation\tCOG\tCOG1\tCOG2\n' + ''.join(Output))
     f1.close()
@@ -393,14 +394,12 @@ for all_fasta in all_fasta_set:
         Blast_output4 = dict()
         DB_name4 = dict()
     # set up gene annotation and clustering
-    Blast_output1, DB_name1, DB_name1_2 = annotate_kegg(all_fasta + '.cluster.aa.kegg.txt')
-    Blast_output2, DB_name2 = annotate_metacyc(all_fasta + '.cluster.aa.metacyc.txt')
-    Blast_output3, DB_name3, DB_name3_2 = annotate_eggnog(glob.glob(all_fasta + '.cluster.aa.eggnog.*.txt'))
+    Blast_output1, DB_name1, DB_name1_2 = annotate_kegg(all_fasta + '.kegg.txt')
+    Blast_output2, DB_name2 = annotate_metacyc(all_fasta + '.metacyc.txt')
+    Blast_output3, DB_name3, DB_name3_2 = annotate_eggnog(glob.glob(all_fasta + '.eggnog.*.txt'))
     # sum up
-    Clusters_gene = cluster_uc(all_fasta + '.uc')
+    Clusters_gene = cluster_uc(all_fasta.replace('.cluster.aa','.uc'))
     sum_kegg_eggnog(Blast_output1,DB_name1_2,Blast_output3,DB_name3_2,Clusters_gene)
     sum_annotation(Blast_output1, DB_name1, Blast_output2, DB_name2, Blast_output3, DB_name3, Blast_output4, DB_name4,
                    Clusters_gene)
-
-
 ################################################### END ########################################################
