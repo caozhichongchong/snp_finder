@@ -1,10 +1,10 @@
 # snp_finder
 ## Introduction
 * The snpfinder is a stringent and convenient bioinformatics pipeline for population genetics analysis
-* The snpfinder can cluster lineages, call SNPs, filter SNPs, and screen for PE genes (genes under parallel evolution). 
-* The snpfinder can easily handle tens of species, hundreds of lineages and process them in parallel. 
+* The snpfinder can cluster lineages, call SNPs, filter SNPs, and screen for PE genes (genes under parallel evolution).
+* The snpfinder can easily handle tens of species, hundreds of lineages and process them in parallel.
 * simple input: WGS samples (whole genome sequences)
-* environment: python >= 3.0, 
+* environment: python >= 3.0,
 * required tools: [samtools](https://github.com/samtools/samtools/releases/tag/1.11), [bcftools](https://github.com/samtools/bcftools/releases/tag/1.11), [spades](http://cab.spbu.ru/files/release3.13.0/manual.html#sec2.1), [minimap2](https://github.com/lh3/minimap2), [usearch](https://www.drive5.com/usearch/download.html), [bowtie2](https://anaconda.org/bioconda/bowtie2), [prodigal](https://github.com/hyattpd/Prodigal), [roary](https://sanger-pathogens.github.io/Roary/), [blastn](https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/), [snp-sites](https://github.com/sanger-pathogens/snp-sites), [prokka](https://anaconda.org/bioconda/prokka)\
 samtools: `curl -O https://github.com/samtools/samtools/releases/download/1.11/samtools-1.11.tar.bz2`\
 bcftools `curl -O https://github.com/samtools/bcftools/releases/download/1.11/bcftools-1.11.tar.bz2`\
@@ -31,13 +31,13 @@ prokka: `conda install -c bioconda prokka`
 ### super lazy auto version
 1. Simply run `snp_finder auto -i input_folder`\
 or `snp_finder auto -i input_folder -fq _1.fastq`, if the file extension of WGS #1 files is not _1.fq\
-To identify **truncated genes** caused by SNPs, run `snp_finder auto -i input_folder -trunc True`\
+To identify **truncated genes** caused by SNPs, run `snp_finder auto -i input_folder -trunc True`
 2. Then please run `sh snpfinder_scripts/snp_finder.sh`
 ### fast manual version
-If you would like to run snp_finder in the most efficient and fast mode, try `snp_finder manual`\
+If you would like to run snp_finder in an efficient and parallel mode (using nohup), try `snp_finder manual`
 1. Simply run `snp_finder manual -i input_folder`\
 or `snp_finder manual -i input_folder -fq _1.fastq`, if the file extension of WGS #1 files is not _1.fq\
-To identify **truncated genes** caused by SNPs, run `snp_finder manual -i input_folder -trunc True`\
+To identify **truncated genes** caused by SNPs, run `snp_finder manual -i input_folder -trunc True`
 2. Then please run the scripts in `snpfinder_scripts/snp_finder.sh` step by step, and please make sure all tasks of one step are finished before running the next step!
 ### tune cutoff for PE identification
 As a default, snp_finder identifies PE genes within a lineage by the criteria of `>=2 SNPs, >= 1 SNP per 2 kb, and > 2 unique genotypes` in a lineage.\
