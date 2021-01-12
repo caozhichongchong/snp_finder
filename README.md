@@ -19,12 +19,14 @@ snp-sites: `apt-get install snp-sites` or `conda install snp-sites`\
 prokka: `conda install -c bioconda prokka`
 ## Install snp_finder
 `pip install snp_finder`
+
 ## Preparation
 ### organize files
 * Please move WGS samples (whole genome sequences) isolated from one a species in one subject into one folder
 * Please rename the folder as 'subject_species' (avoid using '_' in donor names and species names)
 * Please rename WGS samples as 'donor_species_gXXXX_1.fq' and 'donor_species_gXXXX_2.fq' (XXXX can be any number and/or common letters)
 * Please put all folders ('subject_species') into one big input folder (`-i`)
+
 ## Start calling SNPs!
 ### super lazy auto version
 1. Simply run `snp_finder auto -i input_folder`\
@@ -49,6 +51,10 @@ Please refer to the format of *example/reference.genome.txt*
 ### pre-assembly
 As a default, snp_finder automatically assembles genomes from WGS samples.\
 To use pre-assembled genomes, you could put them in the same folder of WGS samples and rename them into 'donor_species_gXXXX.fasta'.
+### required tools
+As a default, snp_finder can find the tools in the default $PATH.\
+Otherwise, please provide the absolute PATH to the tools.
+
 ## Output!
 ### PE genes and sequences
 * lineages are named as *specis_cluster_number.donor.donor_name*
@@ -71,6 +77,8 @@ To use pre-assembled genomes, you could put them in the same folder of WGS sampl
 * all pan-genomes: *snpfinder_output/pangenome/pangenome/roary_species*
 ### co-assembly
 * all co-assemblies after removing redundant regions: *snpfinder_output/vcf_round1/co-assembly/\*/*.all.spades1.fasta.noHM.fasta*
+
 ## Citations
+
 ## Contact
 Dr. An-Ni Zhang, anniz44@mit.edu, Alm Lab, Biological Engineering, MIT
