@@ -45,7 +45,7 @@ As a default, snp_finder automatically assembles genomes from WGS samples.\
 To use pre-assembled genomes, you could put them in the same folder of WGS samples and rename them into 'donor_species_gXXXX.fasta'.
 ## Output!
 ### PE genes and sequences
-* lineages were named as *specis_cluster_number.donor.donor_name*
+* lineages are named as *specis_cluster_number.donor.donor_name*
 * all PE within a lineage and across lineages: *snpfinder_output/vcf_round1/merge/summary/all.species.txt.High_select2.txt*
 * PE within a lineage: *snpfinder_output/vcf_round1/merge/summary/all.species.txt*
 * Sequences of PE genes: *snpfinder_output/vcf_round1/merge/summary/all.selected.gene.faa*
