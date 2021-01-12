@@ -5,14 +5,20 @@
 * The snpfinder can easily handle tens of species, hundreds of lineages and process them in parallel. 
 * simple input: WGS samples (whole genome sequences)
 * environment: python >= 3.0, 
-* required tools: [samtools](http://samtools.sourceforge.net/), [bcftools](https://bedtools.readthedocs.io/en/latest/), spades, minimap2, usearch, bowtie, prodigal, roary, blastn, usearch, snp-sites, prokka
-## Install
+* required tools: [samtools](https://github.com/samtools/samtools/releases/tag/1.11), [bcftools](https://github.com/samtools/bcftools/releases/tag/1.11), [spades](http://cab.spbu.ru/files/release3.13.0/manual.html#sec2.1), [minimap2](https://github.com/lh3/minimap2), [usearch](https://www.drive5.com/usearch/download.html), [bowtie2](https://anaconda.org/bioconda/bowtie2), [prodigal](https://github.com/hyattpd/Prodigal), [roary](https://sanger-pathogens.github.io/Roary/), [blastn](https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/), [snp-sites](https://github.com/sanger-pathogens/snp-sites), [prokka](https://anaconda.org/bioconda/prokka)\
+samtools: `curl -O https://github.com/samtools/samtools/releases/download/1.11/samtools-1.11.tar.bz2`\
+bcftools `curl -O https://github.com/samtools/bcftools/releases/download/1.11/bcftools-1.11.tar.bz2`\
+spades: `wget http://cab.spbu.ru/files/release3.13.0/SPAdes-3.13.0-Linux.tar.gz`, `tar -xzf SPAdes-3.13.0-Linux.tar.gz` and `cd SPAdes-3.13.0-Linux/bin/`\
+minimap2: `git clone https://github.com/lh3/minimap2.git` and `cd minimap2 && make`\
+usearch: `curl -O https://www.drive5.com/downloads/usearch11.0.667_i86linux32.gz`\
+bowtie2: `conda install -c bioconda bowtie2`\
+prodigal: `git clone https://github.com/hyattpd/Prodigal.git` and `cd Prodigal && make install`\
+roary: `sudo apt-get install roary` or `curl -O https://github.com/sanger-pathogens/Roary/tarball/master`\
+blastn: `curl -O https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ncbi-blast-2.11.0+-x64-linux.tar.gz`
+snp-sites: `apt-get install snp-sites` or `conda install snp-sites`\
+prokka: `conda install -c bioconda prokka`
+## Install snp_finder
 `pip install snp_finder`
-### latest version (unstable though)
-`git clone https://github.com/caozhichongchong/snp_finder.git `\
-`cd snp_finder`\
-`python setup.py build`\
-`python setup.py install`
 ## Preparation
 ### organize files
 * Please move WGS samples (whole genome sequences) isolated from one a species in one subject into one folder
@@ -35,10 +41,7 @@ To identify **truncated genes** caused by SNPs, run `snp_finder manual -i input_
 As a default, snp_finder identifies PE genes within a lineage by the criteria of `>=2 SNPs, >= 1 SNP per 2 kb, and > 2 unique genotypes` in a lineage.\
 snp_finder identifies PE genes across lineages by the criteria of `>=2 SNPs and > 2 unique genotypes` in all lineages of a species.\
 To set different cutoff for how many SNPs on a gene to call PE, you could provide files containing cutoff for specific lineages (`-cutoff`) and/or species (`-cutoffsp`).\
-Please refer to the format of *example/SNP_cutoff_species.txt* and *example/SNP_cutoff_lineage.txt*.\
------------- | -------------
-Lineage 1| 3
-Lineage 2 | 3
+Please refer to the format of *example/SNP_cutoff_species.txt* and *example/SNP_cutoff_lineage.txt*.
 ### reference genomes
 As a default, snp_finder uses co-assembly of a species as the reference genome.\
 You could also use your preferred reference genomes by providing a file containing the path of genomes to specific folders (`-ref`).\
