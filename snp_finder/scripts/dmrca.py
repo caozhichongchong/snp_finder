@@ -41,7 +41,7 @@ def SNP_seq_diff(seq1, seq2):
 all_vcf_file=glob.glob(os.path.join(output_dir_merge,'*%s'%(vcf_name)))
 alloutput = []
 for vcf_file in all_vcf_file:
-    donor_species = os.path.split(vcf_file)[-1].split('.all')[0]
+    donor_species = os.path.split(vcf_file)[-1].split('.raw.vcf')[0].replace('.all','').replace('1_PB','1_PaDi')
     genome_num = 0
     SNP_to_ref_all = []
     record_seq = ''
@@ -55,8 +55,8 @@ for vcf_file in all_vcf_file:
             SNP_to_ref_all.append(SNP_seq_diff(Ref_seq, record_seq))
             genome_num += 1
     if genome_num > 0:
-        alloutput.append('%s\t%s\t%.3f\t%.3f\n'%(donor_species,genome_num,statistics.mean(SNP_to_ref_all)/genome_num,
-                                               statistics.stdev(SNP_to_ref_all)/genome_num))
+        alloutput.append('%s\t%s\t%.3f\t%.3f\n'%(donor_species,genome_num,statistics.mean(SNP_to_ref_all),
+                                               statistics.stdev(SNP_to_ref_all)))
 
 f1 = open(os.path.join(output_dir_merge + '/summary/', 'alldmrca.txt'),'w')
 f1.write('donor_species\tgenome_num\tdmrca\tdmrca_stdev\n' + ''.join(alloutput))

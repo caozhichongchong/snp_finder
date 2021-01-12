@@ -1,0 +1,4 @@
+am_BA	/scratch/users/anniz44/BA_ref_genome.fa
+am_BiPs	/scratch/users/anniz44/BiPs_ref_genome.fa
+am_BL	/scratch/users/anniz44/BL_ref_genome.fa
+am_PaEx	/scratch/users/anniz44/PaEx_ref_genome.fa

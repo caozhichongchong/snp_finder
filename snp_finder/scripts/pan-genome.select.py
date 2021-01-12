@@ -422,7 +422,7 @@ for fasta_files in glob.glob(os.path.join(output_dir,'*cluster.aa')) + glob.glob
     output_file.close()
 
 ################################################### END ########################################################
-################################################### SET PATH ########################################################
+################################################### SET PATH ############### #########################################
 # Jay pangenome
 import glob
 import os
@@ -572,20 +572,12 @@ os.system('mv %s.nom.fasta %s' %(fasta_file,fasta_file))
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
 # metagenomes enriched genes
-#from matplotlib import style
 import os
 import glob
 import pandas as pd
 import numpy as np
 from Bio import SeqIO
 from Bio.Seq import Seq
-#import skbio
-#from scipy.spatial import distance
-#from sklearn import datasets
-#from sklearn.decomposition import PCA
-#from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-#import ecopy as ep
-#from sklearn import manifold
 
 genemultispecies = '/scratch/users/anniz44/genomes/pan-genome/allpangenome/all_flexible.genome.fa.cluster.aa.multispecies.fasta'
 geneenrich = '/scratch/users/anniz44/genomes/pan-genome/allpangenome/subcluster/all_flexible.genome.fa.cluster.aa.enriched.fasta.multispecies.fasta'
@@ -731,8 +723,201 @@ output_file.close()
 
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
+# pick up enriched genes human against animal and human against nature
+import os
+import glob
+from Bio import SeqIO
+from Bio.Seq import Seq
+
+def extract_fun(enrichfile,aafile,dnafile,outputtag):
+    enrich_file1_set = []
+    for lines in open(enrichfile,'r'):
+        enrich_file1_set.append(lines.split('\t')[0].split('\n')[0] + '_1')
+    output_file1_set = []
+    for record in SeqIO.parse(aafile, 'fasta'):
+        record_id = str(record.id)
+        if record_id in enrich_file1_set:
+            output_file1_set.append('>%s\t%s\n%s\n' %(record_id,str(record.description),str(record.seq)))
+    output_file = open(outputtag + '.aa','w')
+    output_file.write(''.join(output_file1_set))
+    output_file.close()
+    enrich_file1_set = []
+    for lines in open(enrichfile,'r'):
+        enrich_file1_set.append(lines.split('\t')[0].split('\n')[0])
+    output_file1_set = []
+    for record in SeqIO.parse(dnafile, 'fasta'):
+        record_id = str(record.id)
+        if record_id in enrich_file1_set:
+            output_file1_set.append('>%s\t%s\n%s\n' %(record_id,str(record.description),str(record.seq)))
+    output_file = open(outputtag + '.fasta','w')
+    output_file.write(''.join(output_file1_set))
+    output_file.close()
+
+# enriched human to animal
+fasta_dir = '/scratch/users/anniz44/genomes/pan-genome/allpangenome'
+enrich_file1 = os.path.join(fasta_dir,'all_human_1e2than_animal.txt')
+fasta_file1 = os.path.join(fasta_dir,'finished/all_flexible.Jay.cluster.multispecies.aa')
+fasta_file2 = os.path.join(fasta_dir,'finished/all_flexible.Jay.cluster.multispecies.fasta')
+output_filename = os.path.join(fasta_dir,'all_flexible.Jay.cluster.multispecies.enriched.human.to.animal')
+extract_fun(enrich_file1,fasta_file1,fasta_file2,output_filename)
+
+# enriched human to nature
+enrich_file1 = os.path.join(fasta_dir,'all_human_1e6than_nature.txt')
+output_filename = os.path.join(fasta_dir,'all_flexible.Jay.cluster.multispecies.enriched.human.to.nature')
+extract_fun(enrich_file1,fasta_file1,fasta_file2,output_filename)
+
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# pick up significantly enriched genes human against animal and human against nature
+import os
+import glob
+from Bio import SeqIO
+from Bio.Seq import Seq
+
+def extract_fun(enrichfile,aafile,dnafile,outputtag):
+    enrich_file1_set = []
+    for lines in open(enrichfile,'r'):
+        enrich_file1_set.append(lines.split('\t')[3].split('\n')[0])
+    output_file1_set = []
+    for record in SeqIO.parse(aafile, 'fasta'):
+        record_id = str(record.id)
+        if record_id in enrich_file1_set:
+            output_file1_set.append('>%s\t%s\n%s\n' %(record_id,str(record.description),str(record.seq)))
+    output_file = open(outputtag + '.aa','w')
+    output_file.write(''.join(output_file1_set))
+    output_file.close()
+    output_file1_set = []
+    for record in SeqIO.parse(dnafile, 'fasta'):
+        record_id = str(record.id)
+        if record_id + '_1' in enrich_file1_set:
+            output_file1_set.append('>%s\t%s\n%s\n' %(record_id,str(record.description),str(record.seq)))
+    output_file = open(outputtag + '.fasta','w')
+    output_file.write(''.join(output_file1_set))
+    output_file.close()
+
+def extract_fun_sum(enrichfile,aafile,dnafile,outputtag):
+    enrich_file1_set = []
+    for lines in open(enrichfile, 'r'):
+        enrich_file1_set.append(lines.split('\t')[3].split('\n')[0])
+    for tags in ['.cluster.aa.all.kegg.sum','.cluster.aa.all.eggnog.sum',
+                 '.cluster.aa.kegg.sum', '.cluster.aa.eggnog.sum',
+                 '.cluster.aa.AHR.txt','.cluster.aa.SARG.txt','.cluster.aa.buty.txt']:
+        try:
+            f1 = open(outputtag + tags, 'r')
+        except IOError:
+            output_file1_set = []
+            for lines in open(aafile + tags,'r'):
+                lines_set = lines.split('\t')
+                if any(genes in enrich_file1_set for genes in lines_set):
+                    output_file1_set.append(lines)
+            output_file = open(outputtag + tags, 'w')
+            output_file.write(''.join(output_file1_set))
+            output_file.close()
+
+def extract_fun_cluster(enrichfile,aafile,dnafile,outputtag):
+    enrich_file1_set = []
+    for lines in open(enrichfile,'r'):
+        enrich_file1_set.append(lines.split('\t')[3].split('\n')[0])
+    output_file1_set = []
+    for record in SeqIO.parse(aafile + '.cluster.aa', 'fasta'):
+        record_id = str(record.id)
+        if record_id in enrich_file1_set:
+            output_file1_set.append('>%s\t%s\n%s\n' %(record_id,str(record.description),str(record.seq)))
+    output_file = open(outputtag + '.aa.cluster.aa','w')
+    output_file.write(''.join(output_file1_set))
+    output_file.close()
+
+# enriched human to animal
+fasta_dir = '/scratch/users/anniz44/genomes/pan-genome/allpangenome'
+enrich_file1 = os.path.join(fasta_dir,'multispecies.enriched.human.eggnog.MoreThanFlexible.fun.withspecies.txt')
+fasta_file1 = os.path.join(fasta_dir,'finished/all_flexible.Jay.cluster.multispecies.enriched.human.to.nature.aa')
+fasta_file2 = os.path.join(fasta_dir,'finished/all_flexible.Jay.cluster.multispecies.enriched.human.to.nature.fasta')
+output_filename = os.path.join(fasta_dir,'all_flexible.Jay.cluster.multispecies.enriched.human.to.nature.MoreThanFlexible')
+#extract_fun(enrich_file1,fasta_file1,fasta_file2,output_filename)
+extract_fun_sum(enrich_file1,fasta_file1,fasta_file2,output_filename)
+#extract_fun_cluster(enrich_file1,fasta_file1,fasta_file2,output_filename)
+
+# enriched human to nature
+enrich_file1 = os.path.join(fasta_dir,'multispecies.enriched.human.eggnog.MoreThanAnimal.fun.withspecies.txt')
+fasta_file1 = os.path.join(fasta_dir,'finished/all_flexible.Jay.cluster.multispecies.enriched.human.to.animal.aa')
+fasta_file2 = os.path.join(fasta_dir,'finished/all_flexible.Jay.cluster.multispecies.enriched.human.to.animal.fasta')
+output_filename = os.path.join(fasta_dir,'all_flexible.Jay.cluster.multispecies.enriched.human.to.animal.MoreThanAnimal')
+#extract_fun(enrich_file1,fasta_file1,fasta_file2,output_filename)
+extract_fun_sum(enrich_file1,fasta_file1,fasta_file2,output_filename)
+#extract_fun_cluster(enrich_file1,fasta_file1,fasta_file2,output_filename)
+
+################################################### END ########################################################
+################################################### SET PATH ########################################################
 # annotate all fasta
 # sh /scratch/users/anniz44/scripts/1MG/pan-genome/annotate.sh
+# run CAZY
+import os
+import glob
+
+script_dir = '/scratch/users/anniz44/scripts/1MG/pan-genome/'
+fasta_dir = '/scratch/users/anniz44/genomes/pan-genome/allpangenome/finished'
+output_dir = script_dir + '/runCAZY/'
+
+try:
+    os.mkdir(output_dir)
+except IOError:
+    pass
+
+allfasta = glob.glob(os.path.join(fasta_dir,'*aa.cluster.aa'))
+for fasta in allfasta:
+    sh_temp = '#!/bin/bash\nsource ~/.bashrc\npy37\ncd /scratch/users/anniz44/bin/pro/run_dbcan/\n'
+    sh_temp += 'python run_dbcan.py %s protein --out_dir %s -t diamond\n'%(
+        fasta, fasta.split('.aa.cluster.aa')[0] + '_CAZY'
+    )
+    f1 = open(os.path.join(output_dir,os.path.split(fasta)[-1]+'.sh'),'w')
+    f1.write(sh_temp)
+    f1.close()
+
+# annotate CAZY
+import os
+import glob
+
+#output_dir = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/summary/'
+
+output_dir = '/scratch/users/anniz44/genomes/pan-genome/allpangenome/finished/'
+CAZY_output = glob.glob(output_dir + '/*_CAZY/diamond.out')
+annotation_file = '/scratch/users/anniz44/bin/pro/run_dbcan/db/CAZyDB.07302020.fam-activities.annotated.txt'
+
+annotation = dict()
+for lines in open(annotation_file,'r'):
+    lines_set = lines.split('\n')[0].split('\t')
+    try:
+        annotation.setdefault(lines_set[0],[])
+        annotation[lines_set[0]].append(lines_set[1])
+    except IndexError:
+        pass
+
+unanno = set()
+for a_CAZY_output in CAZY_output:
+    Output = []
+    Output.append('geneID\tCAZY\tCAZY_anno\t\n')
+    for lines in open(a_CAZY_output,'r'):
+        if not lines.startswith('Gene ID'):
+            lines_set = lines.split('\n')[0].split('\t')
+            geneID = lines_set[0]
+            CAZY_all = lines_set[1].split('|')
+            CAZY_anno = []
+            for CAZY in CAZY_all:
+                for CAZY2 in CAZY_all:
+                    CAZY = CAZY.split('_')[0]
+                    CAZY2 = CAZY2.split('_')[0]
+                    CAZY_new = '%s|%s'%(CAZY,CAZY2)
+                    if CAZY_new in annotation:
+                        CAZY_anno += annotation.get(CAZY_new)
+            for a_CAZY_anno in CAZY_anno:
+                Output.append('%s\t%s\t%s\t\n'%(geneID,lines_set[1],a_CAZY_anno))
+            if CAZY_anno == []:
+                unanno.add(lines_set[1])
+    f1 = open(os.path.join(output_dir, os.path.split(a_CAZY_output)[-2]+'.txt'), 'w')
+    f1.write(''.join(Output))
+    f1.close()
+
+unanno
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
 
@@ -933,4 +1118,3 @@ os.system('rm -rf  /scratch/users/anniz44/Metagenomes/pangenome/search_output/0/
 # after traits_finder sum_meta
 os.system('rm -rf  /scratch/users/anniz44/Metagenomes/pangenome_all/search_output')
 os.system('rm -rf  /scratch/users/anniz44/Metagenomes/pangenome/search_output')
-

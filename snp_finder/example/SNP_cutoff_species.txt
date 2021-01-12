@@ -1,0 +1,9 @@
+BA	3
+BiPs	3
+BL	3
+PaEx	3
+CoAe	3
+BaTh	3
+BaVu	3
+BaOv	3
+PaMe	3

@@ -23,15 +23,15 @@ required.add_argument("-o",
 optional.add_argument("-core",
                       help="a file of core/flexible genes",
                       type=str, default='None',
-                      metavar='/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/summary/all.denovo.gene.faa.allpangenome.sum.txt')
+                      metavar='all.denovo.gene.faa.allpangenome.sum.txt')
 optional.add_argument("-cutoff",
                       help="a file of cutoff of how many SNPs on a gene for each clonal population to call parallel evolution",
                       type=str, default='None',
                       metavar='total_SNP_cutoff.txt')
 optional.add_argument("-contig",
                       help="set a contig length cutoff to remove short contigs from dnds calculation (default 10000 bp)",
-                      type=int, default=10000,
-                      metavar='10000')
+                      type=int, default=5000,
+                      metavar='5000')
 ################################################## Definition ########################################################
 args = parser.parse_args()
 
@@ -697,8 +697,6 @@ for vcf_file in all_vcf_file:
     if 'PB' in donor_species:
         donor_species = donor_species.replace('PB','PaDi')
     species = donor_species.split('_cluster')[0]
-    if 'IBD' in donor_species:
-        species = donor_species.split('_')[1]
     ref_dir, ref_name = os.path.split(database)
     database_file = database + '.fna'
     species = donor_species.split('_')[0]

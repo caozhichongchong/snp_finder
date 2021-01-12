@@ -46,7 +46,7 @@ optional.add_argument('-pro',
 optional.add_argument('-rec',
                           help="Optional: recombination region cutoff (default 5000 bp)",
                           metavar="5000-50000",
-                          action='store', default=2000, type=int)
+                          action='store', default=5000, type=int)
 optional.add_argument('-contig',
                           help="Optional: contig length cutoff (default 2000 bp)",
                           metavar="5000-50000",

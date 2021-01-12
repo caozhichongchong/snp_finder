@@ -93,21 +93,22 @@ def annotate_eggnog(blast_search):
                 Blast_output[gene_name][0].append(db_name)
                 Blast_output[gene_name][1].append(identity)
                 DB_name.setdefault(db_name, ['', ''])
-                DB_name_2.setdefault(db_name, '')
+                DB_name_2.setdefault(db_name, [])
     for database in [database_eggnog]:
         for lines in open(database, 'r'):
             if not lines.startswith('#'):
                 lines_set = lines.split('\n')[0].split('\t')
                 db_name = lines_set[1]
                 function_name = ''
-                annotation_catogary = ''
+                annotation_catogary = []
                 for COG in lines_set[2]:
-                    annotation_catogary += '\t' + Anno_eggnog[COG]
+                    annotation_catogary.append(Anno_eggnog[COG])
                 annotation_fun = lines_set[3]
                 if db_name in DB_name:
                     DB_name[db_name][0] = function_name
                     DB_name[db_name][1] = annotation_fun
-                    DB_name_2[db_name] = '%s\t%s%s'%(function_name,annotation_fun,annotation_catogary)
+                    for annotation_catogary_sub in annotation_catogary:
+                        DB_name_2[db_name].append('%s\t%s\t%s'%(function_name,annotation_fun,annotation_catogary_sub))
     best_hit(Blast_output, 1)
     return [Blast_output,DB_name,DB_name_2]
 
@@ -187,7 +188,7 @@ def cluster_uc(cluster_input):
     for lines in open(cluster_input, 'r'):
         line_set = lines.split('\n')[0].split('\t')
         cluster = line_set[1]
-        record_name = line_set[8]
+        record_name = line_set[8].split(' ')[0]
         Clusters.setdefault(record_name, cluster)
     return Clusters
 
@@ -202,39 +203,66 @@ def annotate_gene(Blast_output1,DB_name1,All_annotation):
     return All_annotation
 
 def sum_kegg_eggnog(Blast_outputkegg,DB_namekegg,Blast_outputegg,DB_nameegg,Clusters):
-    Output = []
+    Clusters_cluster = dict()
+    for gene in Clusters:
+        cluster = Clusters[gene]
+        Clusters_cluster.setdefault(cluster,set())
+        Clusters_cluster[cluster].add(gene)
+    Output = set()
+    Output2 = set()
     for gene_name in Blast_outputkegg:
         cluster = Clusters.get(gene_name, '')
-        donor = gene_name.split('_')[0]
-        donor_species = gene_name.split('__')[0].split('_CL')[0].replace('BA_BA', 'Bifido_adoles').replace('BL_BL',
-                                                                                                           'Bifido_longum').replace(
-            'PB_PB', 'Paraba_butyra').replace('BA_cluste', 'Bifido_adoles').replace('BL_cluste',
-                                                                                    'Bifido_longum').replace(
-            'PB_cluste', 'Paraba_butyra')
-        species = donor_species.replace(donor + '_', '')
-        for db_name in Blast_outputkegg[gene_name]:
-            if db_name in DB_namekegg:
-                Output.append('%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(cluster,donor,species,donor_species,gene_name,db_name,DB_namekegg[db_name]))
+        all_gene = Clusters_cluster.get(cluster)
+        for gene_name_sub in all_gene:
+            donor = gene_name_sub.split('_')[0]
+            donor_species = gene_name_sub.split('__')[0].split('_CL')[0].replace('BA_BA', 'Bifido_adoles').replace('BL_BL',
+                                                                                                               'Bifido_longum').replace(
+                'PB_PB', 'Paraba_butyra').replace('BA_cluste', 'Bifido_adoles').replace('BL_cluste',
+                                                                                        'Bifido_longum').replace(
+                'PB_cluste', 'Paraba_butyra')
+            species = donor_species.replace(donor + '_', '')
+            for db_name in Blast_outputkegg[gene_name]:
+                if db_name in DB_namekegg:
+                    Output.add('%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(cluster,donor,species,donor_species,gene_name_sub,db_name,DB_namekegg[db_name]))
+                    if gene_name_sub == gene_name:
+                        Output2.add('%s\t%s\t%s\t%s\t%s\t%s\t%s\n' % (
+                        cluster, donor, species, donor_species, gene_name_sub, db_name, DB_namekegg[db_name]))
     f1 = open(all_fasta + '.kegg.sum','w')
-    f1.write('cluster\tdonor\tspecies\tdonor_species\tgene_name\tKO\tBRITE_KO1\tBRITE_KO2\tBRITE_KO3\n' + ''.join(Output))
+    f1.write('cluster\tdonor\tspecies\tdonor_species\tgene_name\tKO\tBRITE_KO1\tBRITE_KO2\tBRITE_KO3\n' + ''.join(list(Output2)))
     f1.close()
-    Output = []
+    f1 = open(all_fasta + '.all.kegg.sum', 'w')
+    f1.write('cluster\tdonor\tspecies\tdonor_species\tgene_name\tKO\tBRITE_KO1\tBRITE_KO2\tBRITE_KO3\n' + ''.join(
+        list(Output)))
+    f1.close()
+    Output = set()
+    Output2 = set()
     for gene_name in Blast_outputegg:
         cluster = Clusters.get(gene_name, '')
-        donor = gene_name.split('_')[0]
-        donor_species = gene_name.split('__')[0].split('_CL')[0].replace('BA_BA', 'Bifido_adoles').replace('BL_BL',
-                                                                                                           'Bifido_longum').replace(
-            'PB_PB', 'Paraba_butyra').replace('BA_cluste', 'Bifido_adoles').replace('BL_cluste',
-                                                                                    'Bifido_longum').replace(
-            'PB_cluste', 'Paraba_butyra')
-        species = donor_species.replace(donor + '_', '')
-        for db_name in Blast_outputegg[gene_name]:
-            if db_name in DB_nameegg:
-                Output.append('%s\t%s\t%s\t%s\t%s\t%s\t%s\n' % (
-                cluster, donor, species, donor_species, gene_name, db_name, DB_nameegg[db_name]))
+        all_gene = Clusters_cluster.get(cluster)
+        for gene_name_sub in all_gene:
+            donor = gene_name_sub.split('_')[0]
+            donor_species = gene_name_sub.split('__')[0].split('_CL')[0].replace('BA_BA', 'Bifido_adoles').replace('BL_BL',
+                                                                                                               'Bifido_longum').replace(
+                'PB_PB', 'Paraba_butyra').replace('BA_cluste', 'Bifido_adoles').replace('BL_cluste',
+                                                                                        'Bifido_longum').replace(
+                'PB_cluste', 'Paraba_butyra')
+            species = donor_species.replace(donor + '_', '')
+            for db_name in Blast_outputegg[gene_name]:
+                if db_name in DB_nameegg:
+                    for funegg in DB_nameegg[db_name]:
+                        Output.add('%s\t%s\t%s\t%s\t%s\t%s\t%s\n' % (
+                        cluster, donor, species, donor_species, gene_name_sub, db_name, funegg))
+                        if gene_name_sub == gene_name:
+                            Output2.add('%s\t%s\t%s\t%s\t%s\t%s\t%s\n' % (
+                                cluster, donor, species, donor_species, gene_name_sub, db_name, funegg))
     f1 = open(all_fasta + '.eggnog.sum', 'w')
     f1.write(
-        'cluster\tdonor\tspecies\tdonor_species\tgene_name\tEGGNOG\tannotation\tCOG\tCOG1\tCOG2\n' + ''.join(Output))
+        'cluster\tdonor\tspecies\tdonor_species\tgene_name\tEGGNOG\tannotation\tCOG\tCOG1\tCOG2\n' + ''.join(list(Output2)))
+    f1.close()
+    f1 = open(all_fasta + '.all.eggnog.sum', 'w')
+    f1.write(
+        'cluster\tdonor\tspecies\tdonor_species\tgene_name\tEGGNOG\tannotation\tCOG\tCOG1\tCOG2\n' + ''.join(
+            list(Output)))
     f1.close()
 
 def cluster_genes(All_annotation,Clusters):

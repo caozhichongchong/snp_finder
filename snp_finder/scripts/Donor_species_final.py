@@ -8834,7 +8834,9 @@ print('python SNPfilter_WGS.py -i %s -vcf %s -s %s'%(vcf_folder, vcf_format,inpu
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
 output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
 cutoff_file = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/total_SNP_cutoff.txt'
-print('python dnds.py -s %s -o %s -cutoff %s -contig 9440'%(input_script, output_dir_merge,cutoff_file))
+#contig = 9440
+contig = 5000
+print('python dnds.py -s %s -o %s -cutoff %s -contig %s'%(input_script, output_dir_merge,cutoff_file,contig))
 
 # step 5 parallel evolution
 co_assembly_dir = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/co-assembly/'
@@ -8845,31 +8847,34 @@ cutoff_file = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/total_S
 print('python parallel_evolution.py -i %s -s %s -o %s -cutoff %s'%(co_assembly_dir,input_script, output_dir_merge,cutoff_file))
 print('please run %s/%s'%(input_script,'allannotate.sh'))
 print('please run %s/%s'%(input_script,'allannotate_all.sh'))
-# sum annotation
-output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
-print('python annotate_sum.py -o %s'%(output_dir_merge))
+
 # step 6 dmrca
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
 output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
 print('python dnds.py -s %s -o %s'%(input_script, output_dir_merge))
 
-# step 7 core or flexible
-allgenome = '/scratch/users/anniz44/genomes/donor_species/*/round*/'
-input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+# sum annotation
 output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
+print('python annotate_sum.py -o %s'%(output_dir_merge))
 
-print('python core_flexible.py -i \"%s\" -s %s -o %s'%(allgenome,input_script, output_dir_merge))
-print('please run %s/%s'%(input_script,'pangenome.sh'))
+# step 7 core or flexible
+#allgenome = '/scratch/users/anniz44/genomes/donor_species/*/round*/'
+#input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+#output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
+#print('python core_flexible.py -i \"%s\" -s %s -o %s'%(allgenome,input_script, output_dir_merge))
+#print('please run %s/%s'%(input_script,'pangenome.sh'))
+#output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
+#print('python core_flexible_sum.py -o %s'%(output_dir_merge)) > not used
 
+
+# sum core or flexible -> gene core flexible in R cross-genus
+# input R file all.genome.gene.faa.uc.species.sum from annotate_sum.py
+# all.genome.gene.faa.uc usearch 0.7 cluster from /scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/co-assembly/*/*.noHM.fasta.faa
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
 output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
 cutoff_file = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/total_SNP_cutoff.txt'
-core_file = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/summary/all.denovo.gene.faa.allpangenome.sum.txt'
+core_file = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/summary/all.species.High_select2.all.gene.speciesnum.core_flexible.txt'
 print('python dnds.py -s %s -o %s -cutoff %s -contig 9440 -core %s'%(input_script, output_dir_merge,cutoff_file,core_file))
-
-# sum core or flexible
-output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
-print('python core_flexible_sum.py -o %s'%(output_dir_merge))
 
 # stepn co-assembly mapping to metagenomes
 assembly_folder = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/co-assembly'
@@ -8891,11 +8896,11 @@ print('python SNPfilter_meta.py -i %s -mfq _1.fasta -o %s'%(assembly_folder,outp
 # vcf processing per cluster
 import glob
 import os
-input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
-output_dir = '/scratch/users/anniz44/genomes/donor_species/'
-genome_root = '/scratch/users/anniz44/genomes/donor_species/*/round*/'
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/IBD'
+output_dir = '/scratch/users/anniz44/genomes/donor_species/IBD/'
+genome_root = '/scratch/users/anniz44/genomes/donor_species/jay/round*/'
 
-input_script_vcf = os.path.join(input_script,'vcfpro_BN10')
+input_script_vcf = os.path.join(input_script,'vcfpro')
 #os.system('rm -rf %s'%(input_script_vcf))
 vcf_name = '.all*raw.vcf'
 try:
@@ -8903,19 +8908,25 @@ try:
 except IOError:
     pass
 
-all_vcf_file=glob.glob(os.path.join(output_dir + '/WGS/vcf_round1/merge_BN10/','*%s'%(vcf_name)))
+all_vcf_file=glob.glob(os.path.join(output_dir + '/vcf_round1/merge/','*%s'%(vcf_name)))
 for vcf_file in all_vcf_file:
-    donor_species = os.path.split(vcf_file)[-1].split('.all')[0]
-    f1 = open(os.path.join(input_script_vcf, '%s.sh'%(donor_species)), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n')
-    f1.write('python /scratch/users/anniz44/scripts/1MG/donor_species/assembly/vcf_process.py -i \"%s\" -s %s -o %s -cluster %s\n'%(genome_root, input_script, output_dir + '/WGS/',donor_species))
-    f1.close()
+    filesize = 0
+    try:
+        filesize = int(os.path.getsize(vcf_file + '.filtered.snpfreq.txt'))
+    except FileNotFoundError:
+        pass
+        donor_species = os.path.split(vcf_file)[-1].split('.all')[0]
+        f1 = open(os.path.join(input_script_vcf, '%s.sh'%(donor_species)), 'w')
+        f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n')
+        f1.write('python %s/vcf_process.py -i \"%s\" -s %s -o %s -cluster %s\n'%(input_script,genome_root, input_script, output_dir,donor_species))
+        f1.close()
 
 f1 = open(os.path.join(input_script, 'allvcfprocession.sh'), 'w')
 f1.write('#!/bin/bash\nsource ~/.bashrc\n')
 for sub_scripts in glob.glob(os.path.join(input_script_vcf, '*.sh')):
     sub_scripts_name = os.path.split(sub_scripts)[-1]
-    f1.write('jobmit %s %s\n' % (sub_scripts, os.path.split(sub_scripts)[-1]))
+    #f1.write('jobmit %s %s\n' % (sub_scripts, os.path.split(sub_scripts)[-1]))
+    f1.write('sh %s\n' % (sub_scripts))
 
 f1.close()
 print('please run: sh %s/allvcfprocession.sh'%(input_script))
@@ -8925,13 +8936,13 @@ print('please run: sh %s/allvcfprocession.sh'%(input_script))
 # remove rec per cluster
 import glob
 import os
-vcf_folder = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge'
 vcf_format = '.filtered.vcf'
-#vcf_format = '.final.vcf'
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
-input_script_vcf = os.path.join(input_script,'vcfremoverec2')
-output_name = 'final.removerec'
-rec_set = ['EsCo','PB','BL','BA','TuSa','BiPs']
+vcf_folder = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge'
+
+input_script_vcf = os.path.join(input_script,'vcfremoverec')
+
+rec_set = ['EsCo','PB','BL','BA','TuSa','BiPs','PaDi']
 os.system('rm -rf %s'%(input_script_vcf))
 try:
     os.mkdir(input_script_vcf)
@@ -8953,19 +8964,79 @@ for vcf_file in all_vcf_file:
         if filesize == 0:
             if any(item in donor_species for item in rec_set):
                 rec_cutoff = 50000
+                contig_cutoff = 10000
             else:
                 rec_cutoff = 5000
+                contig_cutoff = 5000
+            if donor_species == '1_PB_IBD_0_clustercluster1':
+                # lots of big MGEs, small contigs are main contigs
+                contig_cutoff = 5000
             f1 = open(os.path.join(input_script_vcf, '%s.sh'%(donor_species)), 'w')
             f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n')
-            f1.write('python /scratch/users/anniz44/scripts/1MG/donor_species/assembly/SNPfilter_WGS.py -i %s -vcf %s -cluster %s -s %s -rec %s\n'%(vcf_folder, vcf_format, donor_species,input_script,rec_cutoff))
+            f1.write('python %s/SNPfilter_WGS_withdonor.py -i %s -vcf %s -cluster %s -s %s -rec %s -contig %s\n'%(input_script,vcf_folder, vcf_format, donor_species,input_script,rec_cutoff,contig_cutoff))
             f1.close()
 
 f1 = open(os.path.join(input_script, 'allvcfremoverec.sh'), 'w')
 f1.write('#!/bin/bash\nsource ~/.bashrc\n')
 for sub_scripts in glob.glob(os.path.join(input_script_vcf, '*.sh')):
     sub_scripts_name = os.path.split(sub_scripts)[-1]
-    f1.write('jobmit %s %s\n' % (sub_scripts, os.path.split(sub_scripts)[-1]))
+    #f1.write('jobmit %s %s\n' % (sub_scripts, os.path.split(sub_scripts)[-1]))
+    f1.write('sh %s\n' % (sub_scripts))
 
+f1.write('jobmit dnds.sh dnds.sh\n')
+f1.close()
+print('please run: sh %s/allvcfremoverec.sh'%(input_script))
+
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+
+# remove rec per cluster IBD
+import glob
+import os
+vcf_format = '.filtered.vcf'
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/IBD'
+vcf_folder = '/scratch/users/anniz44/genomes/donor_species/IBD/vcf_round1/merge'
+
+input_script_vcf = os.path.join(input_script,'vcfremoverec')
+
+rec_set = ['EsCo','PB','BL','BA','TuSa','BiPs','PaDi']
+os.system('rm -rf %s'%(input_script_vcf))
+try:
+    os.mkdir(input_script_vcf)
+except IOError:
+    pass
+
+all_vcf_file=glob.glob(os.path.join(vcf_folder,'*%s'%(vcf_format)))
+Donor_species = set()
+contig_cutoff = 10000
+for vcf_file in all_vcf_file:
+    donor_species = os.path.split(vcf_file)[-1].split('.all')[0]
+    if donor_species not in Donor_species:
+        Donor_species.add(donor_species)
+        parsi_output = os.path.join(os.path.split(vcf_file)[0], '%s.all.parsi.fasta' % (donor_species))
+        filesize = 0
+        try:
+            filesize = int(os.path.getsize(parsi_output))
+        except FileNotFoundError:
+            pass
+        if filesize == 0:
+            if any(item in donor_species for item in rec_set):
+                rec_cutoff = 5000
+            else:
+                rec_cutoff = 2000
+            f1 = open(os.path.join(input_script_vcf, '%s.sh'%(donor_species)), 'w')
+            f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n')
+            f1.write('python %s/SNPfilter_WGS.py -i %s -vcf %s -cluster %s -s %s -rec %s -contig %s\n'%(input_script,vcf_folder, vcf_format, donor_species,input_script,rec_cutoff,contig_cutoff))
+            f1.close()
+
+f1 = open(os.path.join(input_script, 'allvcfremoverec.sh'), 'w')
+f1.write('#!/bin/bash\nsource ~/.bashrc\n')
+for sub_scripts in glob.glob(os.path.join(input_script_vcf, '*.sh')):
+    sub_scripts_name = os.path.split(sub_scripts)[-1]
+    #f1.write('jobmit %s %s\n' % (sub_scripts, os.path.split(sub_scripts)[-1]))
+    f1.write('sh %s\n' % (sub_scripts))
+
+f1.write('jobmit dnds.sh dnds.sh\n')
 f1.close()
 print('please run: sh %s/allvcfremoverec.sh'%(input_script))
 
@@ -9203,3 +9274,256 @@ for species in All_species:
 foutput = open(output_list , 'w')
 foutput.write(''.join(Output))
 foutput.close()
+
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# annotate all genomes
+import glob
+import os
+from Bio import SeqIO
+from Bio.Seq import Seq
+
+allfasta = glob.glob('/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/co-assembly/*/*.noHM.fasta.faa')
+output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/'
+input_script_sub = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/annotate_genome'
+
+try:
+    os.mkdir(input_script_sub)
+except IOError:
+    pass
+
+def annotation(all_filter_gene_fasta_file,pre_cluster = ''):
+    # run cluster
+    # run cluster
+    cutoff = 0.7
+    cmd_cluster = ('%s -sort length -cluster_fast %s -id %s -centroids %s.cluster.aa -uc %s.uc -threads %s\n'
+                   % ('usearch', all_filter_gene_fasta_file, cutoff, all_filter_gene_fasta_file,
+                      all_filter_gene_fasta_file, 40))
+    os.system(cmd_cluster)
+    all_filter_gene_fasta_file = all_filter_gene_fasta_file + '.cluster.aa'
+    if pre_cluster!= '':
+        os.system('#%s -makeudb_usearch %s -output %s.udb' %
+                  ('usearch', pre_cluster, pre_cluster))
+        os.system('%s -ublast %s -db %s.udb  -evalue 1e-2 -accel 0.5 -blast6out %s -threads 2'%
+                  ('usearch', all_filter_gene_fasta_file,pre_cluster, all_filter_gene_fasta_file + '.ref.out.txt'))
+    # run metacyc
+    cutoff = 50
+    cutoff2 = 80
+    database = '/scratch/users/mit_alm/database/metacyc/protseq.fsa'
+    cmds = ("%s blastp --query %s --db %s.dmnd --out %s.metacyc.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+            %('diamond',all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
+    f1 = open(os.path.join(input_script_sub, 'metacyc.sh'), 'w')
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
+    f1.close()
+    # run eggnog
+    cutoff = 0.01
+    database = '/scratch/users/mit_alm/database/eggnog/xaa.hmm'
+    cmds = ('%s --tblout %s.eggnog.1.txt --cpu 40 -E %s %s %s\n') %('hmmsearch', all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
+    f1 = open(os.path.join(input_script_sub, 'eggnog.1.sh'), 'w')
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
+    f1.close()
+    database = '/scratch/users/mit_alm/database/eggnog/xab.hmm'
+    cmds = ('%s --tblout %s.eggnog.2.txt --cpu 40 -E %s %s %s\n') % (
+        'hmmsearch',
+        all_filter_gene_fasta_file, cutoff, database, all_filter_gene_fasta_file)
+    f1 = open(os.path.join(input_script_sub, 'eggnog.2.sh'), 'w')
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (cmds))
+    f1.close()
+    database = '/scratch/users/mit_alm/database/eggnog/xac.hmm'
+    cmds = ('%s --tblout %s.eggnog.3.txt --cpu 40 -E %s %s %s\n') % (
+        'hmmsearch',
+        all_filter_gene_fasta_file, cutoff, database, all_filter_gene_fasta_file)
+    f1 = open(os.path.join(input_script_sub, 'eggnog.3.sh'), 'w')
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (cmds))
+    f1.close()
+    # run kegg
+    cutoff = 0.01
+    database = '/scratch/users/mit_alm/database/kegg/kofam/profiles/prokaryote/prokaryote.hmm'
+    cmds = ('%s --tblout %s.kegg.txt --cpu 40 -E %s %s %s\n') %('hmmsearch', all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
+    f1 = open(os.path.join(input_script_sub, 'kegg.sh'), 'w')
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
+    f1.close()
+    # all scripts
+    f1 = open(os.path.join(input_script, 'allannotategenome.sh'), 'w')
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n')
+    for sub_scripts in glob.glob(os.path.join(input_script_sub, '*.sh')):
+        f1.write('jobmit %s %s\n' % (sub_scripts, os.path.split(sub_scripts)[-1]))
+    f1.close()
+    print('please run %s/%s'%(input_script,'allannotategenome.sh'))
+
+
+# merge all genes
+output_gene = output_dir_merge + '/summary/all.genome.gene.faa'
+output_fasta = []
+try:
+    f1 = open(output_gene,'r')
+except IOError:
+    change_name = set()
+    for database in allfasta:
+        donor_species = os.path.split(database)[-1].split('.all')[0]
+        donor_species_new = donor_species.replace('_clustercluster', '_CL')
+        print(donor_species,donor_species_new)
+        for record in SeqIO.parse(database, 'fasta'):
+            record_id = str(record.id)
+            temp_line = '%s\t%s\t%s\t' % (donor_species, donor_species_new, record_id)
+            record_id = 'C_%s_G_%s' % (record_id.split('_')[1], record_id.split('_')[-1])
+            output_fasta.append('>%s__%s\n%s\n' % (donor_species_new, record_id, str(record.seq)))
+            temp_line += '%s__%s\t\n' % (donor_species_new, record_id)
+            change_name.add(temp_line)
+    f1 = open(output_gene, 'w')
+    f1.write(''.join(output_fasta))
+    f1.close()
+    f1 = open(output_gene + '.changename.txt', 'w')
+    f1.write(''.join(list(change_name)))
+    f1.close()
+
+annotation(output_gene)
+
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# core flexible of de novo genes
+import glob
+import os
+from Bio import SeqIO
+from Bio.Seq import Seq
+
+output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge'
+
+allgenome = output_dir_merge + '/summary/all.genome.gene.faa.uc'
+allgenome_denovo = output_dir_merge + '/summary/all.denovo.gene.faa.uc'
+allgenome_HS = output_dir_merge + '/summary/all.selected.gene.faa.High_select2.faa.uc'
+
+def cluster_uc(cluster_input):
+    Clusters = dict()
+    for lines in open(cluster_input, 'r'):
+        line_set = lines.split('\n')[0].split('\t')
+        cluster = line_set[1]
+        record_name = line_set[8].split(' ')[0]
+        Clusters.setdefault(cluster, set())
+        Clusters[cluster].add(record_name)
+    return Clusters
+
+# clusters based on all genes
+Clusters = cluster_uc(allgenome)
+
+def genus_list(species_list):
+    return set([i.replace('BL','BiLo').replace('BA','BiAd')[0:2] for i in species_list])
+
+def species_cluster(Clusters):
+    Clusters_species = dict()
+    Gene_cluster = dict()
+    Output = []
+    Output.append('record\tspecies_num\tallspecies\tgenus_num\t\n')
+    for cluster in Clusters:
+        allrecord = Clusters[cluster]
+        Clusters_species.setdefault(cluster,set())
+        for record in allrecord:
+            record_new = record.split('_')[0]
+            if record_new == '1':
+                record_new = record.split('_')[1]
+            record_new = record_new.replace('PB','PaDi').replace('Bfragilis','BaFr')
+            Clusters_species[cluster].add(record_new)
+        for record in allrecord:
+            Gene_cluster.setdefault(record,Clusters_species[cluster])
+    for record in Gene_cluster:
+        allspecies = Gene_cluster[record]
+        genus = genus_list(allspecies)
+        Output.append('%s\t%s\t%s\t%s\t\n'%(record,len(allspecies),','.join(list(allspecies)),len(genus)
+                                        ))
+    f1 = open(allgenome + '.species.sum','w')
+    f1.write(''.join(Output))
+    f1.close()
+    return [Clusters_species,Gene_cluster]
+
+Clusters_species,Gene_cluster = species_cluster(Clusters)
+
+def cluster_species_sum(fastaname,Gene_cluster):
+    Clusters = cluster_uc(fastaname)
+    Output = []
+    Output.append('record\tspecies_num\tallspecies\tgenus_num\t\n')
+    for cluster in Clusters:
+        allrecord = Clusters[cluster]
+        for record in allrecord:
+            record_new = record.replace('.donor.'+record.split('.')[-1].split('__')[0],'')
+            if '1_PaDi_IBD' in record_new:
+                record_new = record_new.replace('1_PaDi_IBD','1_PB_IBD')
+            allspecies = Gene_cluster[record_new]
+            genus = genus_list(allspecies)
+            Output.append('%s\t%s\t%s\t%s\t\n' % (record, len(allspecies), ','.join(list(allspecies)),len(genus)
+                                                  ))
+    f1 = open(fastaname + '.species.sum', 'w')
+    f1.write(''.join(Output))
+    f1.close()
+
+cluster_species_sum(allgenome_denovo,Gene_cluster)
+cluster_species_sum(allgenome_HS,Gene_cluster)
+
+# core flexible of de novo genes eggnog
+import glob
+import os
+from Bio import SeqIO
+from Bio.Seq import Seq
+
+output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge'
+genus_cutoff = 2 # more than 2 genera as core
+allgenome = output_dir_merge + '/summary/all.genome.gene.faa'
+allgenome_denovo = output_dir_merge + '/summary/all.denovo.gene.faa'
+allgenome_HS = output_dir_merge + '/summary/all.selected.gene.faa.High_select2.faa'
+
+def genus_list(species_list):
+    return set([i.replace('BL','BiLo').replace('BA','BiAd')[0:2] for i in species_list])
+
+def function_species(fastaname):
+    species_file = fastaname + '.uc.species.sum'
+    eggnog_file = fastaname + '.cluster.aa.all.eggnog.sum'
+    Species_fun = dict()
+    for lines in open(species_file, 'r'):
+        line_set = lines.split('\n')[0].split('\t')
+        record_name = line_set[0]
+        species_num = line_set[1]
+        species_name = line_set[2].split(',')
+        tag_genus = 'False'
+        if len(species_name) > 1:
+            genus = genus_list(species_name)
+            if len(genus) > genus_cutoff:
+                tag_genus = 'True'
+        Species_fun.setdefault(record_name, [species_num,tag_genus])
+    Output = []
+    for lines in open(eggnog_file, 'r'):
+        line_set = lines.split('\n')[0].split('\t')
+        if lines.startswith('cluster'):
+            Output.append('\t'.join(line_set) + '\tspecies_num\tcross_genus\n')
+        else:
+            if line_set[6] == '':
+                line_set.pop(6)
+            record_name = line_set[4]
+            species_num, tag_genus = Species_fun[record_name]
+            Output.append('\t'.join(line_set) + '\t%s\t%s\n'%(species_num, tag_genus))
+    f1 = open(fastaname + '.cluster.aa.all.eggnog.sum.species.sum', 'w')
+    f1.write(''.join(Output))
+    f1.close()
+
+function_species(allgenome_HS)
+function_species(allgenome_denovo)
+function_species(allgenome)
+
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# tree phylogenetic diversity
+from Bio import Phylo
+from Bio.Phylo import BaseTree
+import numpy
+
+def to_distance(tree):
+    # phylogenetic diversity of a tree, sum of branch_length
+    dis_all = 0
+    for parent in tree.find_clades(terminal=False, order="level"):
+        for child in parent.clades:
+            if child.branch_length:
+                dis_all += child.branch_length
+    return dis_all
+
+filename_tree = '1_BL_IBD_0_clustercluster1.donor.D77.all.parsi.fasta.out.tree'
+tree = Phylo.read(filename_tree, "newick")
+to_distance(tree)
