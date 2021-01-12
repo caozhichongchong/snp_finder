@@ -5,7 +5,7 @@
 * The snpfinder can easily handle tens of species, hundreds of lineages and process them in parallel. 
 * simple input: WGS samples (whole genome sequences)
 * environment: python >= 3.0, 
-* required tools: samtools, bcftools, spades, minimap2, usearch, bowtie, prodigal, roary, blastn, usearch, snp-sites, prokka
+* required tools: [samtools](http://samtools.sourceforge.net/), [bcftools](https://bedtools.readthedocs.io/en/latest/), spades, minimap2, usearch, bowtie, prodigal, roary, blastn, usearch, snp-sites, prokka
 ## Install
 `pip install snp_finder`
 ### latest version (unstable though)
@@ -35,7 +35,10 @@ To identify **truncated genes** caused by SNPs, run `snp_finder manual -i input_
 As a default, snp_finder identifies PE genes within a lineage by the criteria of `>=2 SNPs, >= 1 SNP per 2 kb, and > 2 unique genotypes` in a lineage.\
 snp_finder identifies PE genes across lineages by the criteria of `>=2 SNPs and > 2 unique genotypes` in all lineages of a species.\
 To set different cutoff for how many SNPs on a gene to call PE, you could provide files containing cutoff for specific lineages (`-cutoff`) and/or species (`-cutoffsp`).\
-Please refer to the format of *example/SNP_cutoff_species.txt* and *example/SNP_cutoff_lineage.txt*.
+Please refer to the format of *example/SNP_cutoff_species.txt* and *example/SNP_cutoff_lineage.txt*.\
+------------ | -------------
+Lineage 1| 3
+Lineage 2 | 3
 ### reference genomes
 As a default, snp_finder uses co-assembly of a species as the reference genome.\
 You could also use your preferred reference genomes by providing a file containing the path of genomes to specific folders (`-ref`).\
