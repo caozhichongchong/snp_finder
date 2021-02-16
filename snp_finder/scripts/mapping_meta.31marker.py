@@ -26,10 +26,6 @@ optional.add_argument("-d",
                       help="database for AMPHORA (protein)",
                       type=str, default='/scratch/users/anniz44/scripts/database/31_marker.fas',
                       metavar='./31_marker.fas')
-required.add_argument("-snp",
-                      help="path of snp files",
-                      type=str, default='None',
-                      metavar='/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/')
 # optional output setup
 optional.add_argument("-s",
                       help="a folder to store all scripts",
@@ -72,7 +68,7 @@ input_script = args.s
 input_script_sub = input_script + '/vcf'
 genome_dir = glob.glob(args.i + '/*')
 metagenome_dir = args.m
-output_dir = args.o + '/MG'
+output_dir = args.o + '/MG_31marker'
 fastq_name = args.mfq
 database_AMPHORA = args.d
 try:
@@ -98,24 +94,76 @@ try:
 except IOError:
     pass
 
+
+def Extractaa(searchfile, orffile,outputfile):
+    # extract the query aa sequences according to a usearch or diamond alignment output
+    # generate a smaller data of potential intI1 or sul1 for blastp search
+    # input the query ORF sequences
+    AA_seq = dict()
+    try:
+        for record in SeqIO.parse(open(orffile, 'r'), 'fasta'):
+            AA_seq.setdefault(str(record.id), str(record.seq))
+        f1 = open(outputfile, 'w')
+        try:
+            for line in open(searchfile, 'r'):
+                try:
+                    AA = str(line).split('\t')[0]
+                    if AA_seq[AA] != '':
+                        # avoid duplicate ORF
+                        f1.write('>' + AA + '\n' +
+                                 str(AA_seq[AA]) + '\n')
+                        AA_seq[AA]=''
+                except KeyError:
+                    print ('AA not found for ' + AA)
+        except (IOError,FileNotFoundError):
+            pass
+        f1.close()
+    except (IOError,FileNotFoundError):
+        print ('Files were missing: ', orffile)
+
+cutoff = 50
+cutoff2 = 80
 allfastq = glob.glob(os.path.join(metagenome_dir,'*%s'%(fastq_name)))
 print(allfastq)
+newdatabase = os.path.join(args.i,'all.31marker.fna')
 alldatabase = []
 # find all database
 for folder in genome_dir:
     donor_species = os.path.split(folder)[-1]
     donor = donor_species.split('_')[0]
-    donor_species_genome = glob.glob(os.path.join(folder, '*.all.spades*.fasta.noHM.fasta'))
+    donor_species_genome = glob.glob(os.path.join(folder, '*.all.spades*.fasta.noHM.fasta.fna'))
     sub_samples = []
     if donor_species_genome != []:
         database = donor_species_genome[0]
+        try:
+            f1 = open(database + '.31marker.fna')
+        except IOError:
+            try:
+                f1 = open(database + '.31marker.txt')
+            except IOError:
+                cmds = (
+                            "diamond blastx --query %s --db %s.dmnd --out %s.31marker.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 1 --evalue 1e-1 --threads 40\n"
+                            % (database, database_AMPHORA, database, cutoff, cutoff2))
+                os.system(cmds)
+            Extractaa(database + '.31marker.txt', database, database + '.31marker.fna')
+        database = database + '.31marker.fna'
         alldatabase.append(database)
 Total_job = max(int(len(allfastq)*len(alldatabase)/250),1)
-
-# map metagenome to each genome
+# output database length
+try:
+    f1 = open(newdatabase,'r')
+except IOError:
+    f1 = open(newdatabase, 'w')
+    Output = []
+    for database in alldatabase:
+        donor_species = os.path.split(database)[-1].split('.all')[0]
+        for record in SeqIO.parse(open(database, 'r'), 'fasta'):
+            Output.append('>%s__%s\n%s\n' % (donor_species, str(record.id), str(record.seq)))
+    f1.write(''.join(Output))
+    f1.close()
+# map metagenome to each genome ESSG
 i = 0
 cmds = ''
-cmdssum = ''
 for database in alldatabase:
     donor_species = os.path.split(database)[-1].split('.all')[0]
     try:
@@ -127,48 +175,35 @@ for database in alldatabase:
         tempbamoutput = os.path.join(output_dir + '/bwa', donor_species_dir_file + '.' + donor_species)
         try:
             f1 = open(tempbamoutput + '.raw.vcf')
-            try:
-                f1 = open(tempbamoutput + '.raw.vcf.depth.MV.sum')
-            except IOError:
-                cmdssum += 'python /scratch/users/anniz44/scripts/1MG/donor_species/assembly/SNPfilter_meta.py -vcf %s -snp %s -mfq %s -o %s \n' % (
-                tempbamoutput + '.raw.vcf',
-                args.snp, args.mfq, args.o)
         except IOError:
-            try:
-                tempbamoutputfinish = os.path.join(output_dir + '/bwa/finished', donor_species_dir_file + '.' + donor_species)
-                f1 = open(tempbamoutputfinish + '.raw.vcf.zip')
-            except IOError:
-                if 'fasta' in fastq_name:
-                    cmds += args.mini + ' -ax sr -N 1000 -p 0.99 -t %s %s.mmi %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
-                        min(40, args.t), database, files, args.sam, min(40, args.t),
-                        tempbamoutput, args.sam, min(40, args.t), tempbamoutput, tempbamoutput, args.sam,
-                        min(40, args.t),
-                        tempbamoutput)
-                else:
-                    cmds += args.mini + ' -ax sr -N 1000 -p 0.99 -t %s %s.mmi %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
-                        min(40, args.t), database, files, args.sam, min(40, args.t),
-                        tempbamoutput, args.sam, min(40, args.t), tempbamoutput, tempbamoutput, args.sam,
-                        min(40, args.t),
-                        tempbamoutput)
-                cmds += '%s mpileup --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -q10 -Ou -B -d3000 -f %s %s.sorted.bam | %s call -c -Ov --threads %s > %s.raw.vcf\n' % (
-                    args.bcf, min(40, args.t), database,
-                    tempbamoutput, args.bcf, min(40, args.t), tempbamoutput)
-                cmds += 'rm -rf %s.bam %s.bam.bai %s.sorted.bam %s.sorted.bam.bai\n' % (
-                    tempbamoutput, tempbamoutput, tempbamoutput, tempbamoutput)
-                try:
-                    f1 = open(tempbamoutput + '.raw.vcf.depth.MV.sum')
-                except IOError:
-                    cmds += 'py37\npython /scratch/users/anniz44/scripts/1MG/donor_species/assembly/SNPfilter_meta.py -vcf %s -snp %s -mfq %s -o %s \n'%(tempbamoutput + '.raw.vcf',
-                                                                                                                                               args.snp, args.mfq, args.o)
-                i += 1
-                if i % Total_job == 0:
-                    f1 = open(os.path.join(input_script_sub, '%s.vcf.sh' % int(i / Total_job)), 'a')
-                    f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n%s' % (''.join(cmds)))
-                    f1.close()
-                    cmds = ''
+            # files2 = files.replace(fastq_name, fastq_name.replace('1', '2'))
+            if 'fasta' in fastq_name:
+                cmds += args.mini + ' -ax sr -N 1000 -p 0.99 -t %s %s.mmi %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
+                    min(40, args.t), database, files, args.sam, min(40, args.t),
+                    tempbamoutput, args.sam, min(40, args.t), tempbamoutput, tempbamoutput, args.sam,
+                    min(40, args.t),
+                    tempbamoutput)
+            else:
+                cmds += args.mini + ' -ax sr -N 1000 -p 0.99 -t %s %s.mmi %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
+                    min(40, args.t), database, files, args.sam, min(40, args.t),
+                    tempbamoutput, args.sam, min(40, args.t), tempbamoutput, tempbamoutput, args.sam,
+                    min(40, args.t),
+                    tempbamoutput)
+            cmds += '%s mpileup --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -q10 -Ou -B -d3000 -f %s %s.sorted.bam | %s call -c -Ov --threads %s > %s.raw.vcf\n' % (
+                args.bcf, min(40, args.t), database,
+                tempbamoutput, args.bcf, min(40, args.t), tempbamoutput)
+            cmds += 'rm -rf %s.bam %s.bam.bai %s.sorted.bam %s.sorted.bam.bai\n' % (
+                tempbamoutput, tempbamoutput, tempbamoutput, tempbamoutput)
+            i += 1
+            if i % Total_job == 0:
+                f1 = open(os.path.join(input_script_sub, '%s.vcf.sh' % int(i / Total_job)), 'a')
+                f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
+                f1.close()
+                cmds = ''
     f1 = open(os.path.join(input_script_sub, '%s.vcf.sh' % int(i / Total_job)), 'a')
     f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
     f1.close()
+
 
 f1 = open(os.path.join(input_script, 'allMGvcf.sh'), 'w')
 f1.write('#!/bin/bash\nsource ~/.bashrc\n')
@@ -180,8 +215,4 @@ for sub_scripts in glob.glob(os.path.join(input_script_sub, '*.vcf.sh')):
 
 f1.close()
 
-f1 = open(os.path.join(input_script, 'allMGsum.sh'), 'w')
-f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n')
-f1.write(''.join(cmdssum))
-f1.close()
 ################################################### END ########################################################

@@ -6438,11 +6438,10 @@ f1.close()
 import glob
 import os
 
-input_script_sub = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/MG2/vcf'
-input_script_merge = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/MG2/vcf_merge'
-input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/MG2'
+input_script_sub = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/MGvcf'
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/'
 genome_dir = glob.glob('/scratch/users/anniz44/genomes/donor_species/selected_species/round2/am_*')
-metagenome_dir = '/scratch/users/anniz44/Metagenomes/BN10_MG/'
+metagenome_dir = '/scratch/users/anniz44/Metagenomes/public_metagenomes/fecal_human'
 output_dir = '/scratch/users/anniz44/genomes/donor_species/selected_species/vcf_round4/MG'
 fastq_name = '_1.fasta'
 genus_select = ['am_Bifidobacterium','am_Bacteroides',
@@ -8877,18 +8876,27 @@ core_file = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/s
 print('python dnds.py -s %s -o %s -cutoff %s -contig 9440 -core %s'%(input_script, output_dir_merge,cutoff_file,core_file))
 
 # stepn co-assembly mapping to metagenomes
-assembly_folder = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/co-assembly'
-fastq1 = '/scratch/users/anniz44/Metagenomes/BN10_MG'
-fastq2 = '/scratch/users/anniz44/Metagenomes/GMC/ProcessedData'
+assembly_folder = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/co-assembly/withPE/'
+fastq1 = '/scratch/users/anniz44/Metagenomes/public_metagenomes/fecal_human'
 output_dir = '/scratch/users/anniz44/genomes/donor_species/'
-input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/human_MG_ESSG/'
 
-print('python mapping_meta.py -i %s -m %s -mfq _1.fasta -o %s -s %s/MGBN10'%(assembly_folder, fastq1, output_dir, input_script))
-print('python mapping_meta.py -i %s -m %s -mfq _1.fasta -o %s -s %s/MGGMC'%(assembly_folder, fastq2, output_dir, input_script))
-print('sh %s/MGBN10/allMGvcf.sh'%(input_script))
-print('sh %s/MGGMC/allMGvcf.sh'%(input_script))
+## ESSG
+print('python mapping_meta.31marker.py -i %s -m %s -mfq .fasta -o %s -s %s'%(assembly_folder, fastq1, output_dir, input_script))
+print('sh %s/allMGvcf.sh'%(input_script))
 
-print('python SNPfilter_meta.py -i %s -mfq _1.fasta -o %s'%(assembly_folder,output_dir))
+print('python SNPfilter_meta.31marker.py -i %s -mfq _1.fasta -o %s'%(assembly_folder,output_dir))
+
+assembly_folder = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/co-assembly/withPE/'
+fastq1 = '/scratch/users/anniz44/Metagenomes/public_metagenomes/fecal_human'
+output_dir = '/scratch/users/anniz44/genomes/donor_species/'
+input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/human_MG'
+snp_dir = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge'
+## all genomes
+print('python mapping_meta.py -i %s -m %s -mfq .fasta -o %s -s %s -snp %s'%(assembly_folder, fastq1, output_dir, input_script,snp_dir))
+print('sh %s/allMGvcf.sh'%(input_script))
+
+print('python SNPsum_meta.py -o %s'%(output_dir))
 
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
@@ -9382,7 +9390,7 @@ annotation(output_gene)
 
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
-# core flexible of de novo genes
+# core flexible of de novo genes, split HS annotation within lineage and across lineages
 import glob
 import os
 from Bio import SeqIO
@@ -9508,6 +9516,31 @@ function_species(allgenome_HS)
 function_species(allgenome_denovo)
 function_species(allgenome)
 
+# split HS annotation within lineage and across lineages
+def HS_lineage(filename,HS_lineagefasta):
+    HS_lineage_set = set()
+    for record in SeqIO.parse(HS_lineagefasta, 'fasta'):
+        record_id = str(record.id)
+        HS_lineage_set.add(record_id)
+    Output_within = set()
+    Output_across = set()
+    for lines in open(filename,'r'):
+        if lines.split('\t')[4] in HS_lineage_set:
+            Output_within.add(lines)
+        else:
+            Output_across.add(lines)
+    f1 = open(filename + '.within.sum', 'w')
+    f1.write(''.join(list(Output_within)))
+    f1.close()
+    f1 = open(filename + '.across.sum', 'w')
+    f1.write(''.join(list(Output_across)))
+    f1.close()
+
+HS_annotation_sum = output_dir_merge + '/summary/all.selected.gene.faa.High_select2.faa.cluster.aa.all.eggnog.sum.species.sum'
+allgenome_HS_lineage = output_dir_merge + '/summary/all.selected.gene.faa'
+
+HS_lineage(HS_annotation_sum,allgenome_HS_lineage)
+
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
 # tree phylogenetic diversity
@@ -9527,3 +9560,53 @@ def to_distance(tree):
 filename_tree = '1_BL_IBD_0_clustercluster1.donor.D77.all.parsi.fasta.out.tree'
 tree = Phylo.read(filename_tree, "newick")
 to_distance(tree)
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# move MG results
+import os,glob
+result_dir = '/scratch/users/anniz44/genomes/donor_species/MG/bwa/'
+snpsumdir = '/scratch/users/anniz44/genomes/donor_species/MG/snpsum/'
+covsumdir = '/scratch/users/anniz44/genomes/donor_species/MG/covsum/'
+
+try:
+    os.mkdir(snpsumdir)
+except IOError:
+    pass
+
+try:
+    os.mkdir(covsumdir)
+except IOError:
+    pass
+
+for snpfile in glob.glob('%s/*.snp.sum'%(result_dir)):
+    try:
+        outputdir = os.path.split(snpfile)[-1].split('.IN.')[1].split('.snp.sum')[0]
+        outputdir = os.path.join('%s/%s'%(snpsumdir,outputdir))
+        os.mkdir(outputdir)
+    except IOError:
+        pass
+    os.system('mv %s %s/'%(snpfile,outputdir))
+
+
+for snpfile in glob.glob('%s/*.coverage.sum'%(result_dir)) + glob.glob('%s/*.depth.MV.sum'%(result_dir)) + glob.glob('%s/*.depth.sum'%(result_dir)):
+    try:
+        outputdir = os.path.split(snpfile)[-1].split('.fasta.')[1].split('.raw.vcf')[0]
+        outputdir = os.path.join('%s/%s'%(covsumdir,outputdir))
+        os.mkdir(outputdir)
+    except IOError:
+        pass
+    os.system('mv %s %s/'%(snpfile,outputdir))
+
+
+
+for snpfile in glob.glob('%s/finished/*.zip'%(result_dir)):
+    try:
+        outputdir = os.path.split(snpfile)[-1].split('.fasta.')[1].split('.raw.vcf')[0]
+        outputdir = os.path.join('%s/finished/%s'%(result_dir,outputdir))
+        os.mkdir(outputdir)
+    except IOError:
+        pass
+    os.system('mv %s %s/'%(snpfile,outputdir))
+
+
+
