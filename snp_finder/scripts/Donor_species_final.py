@@ -12,7 +12,7 @@ output_dir = '/scratch/users/anniz44/genomes/donor_species'
 #os.system('rm -rf %s' %('.'))
 try:
     os.mkdir(output_dir)
-except IOError:
+except IOError:all.withinHS.snp.sum
     pass
 
 try:
@@ -8892,11 +8892,39 @@ fastq1 = '/scratch/users/anniz44/Metagenomes/public_metagenomes/fecal_human'
 output_dir = '/scratch/users/anniz44/genomes/donor_species/'
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/human_MG'
 snp_dir = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge'
-## all genomes
+## all genomes map to MG
 print('python mapping_meta.py -i %s -m %s -mfq .fasta -o %s -s %s -snp %s'%(assembly_folder, fastq1, output_dir, input_script,snp_dir))
 print('sh %s/allMGvcf.sh'%(input_script))
 
 print('python SNPsum_meta.py -o %s'%(output_dir))
+
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# merge MG results
+import os,glob
+outputdir = '/scratch/users/anniz44/genomes/donor_species/MG/summary/withinHS'
+alloutput = []
+os.system('rm %s'%('%s/all.withinHS.snp.sum'%(outputdir)))
+for files in glob.glob('%s/*withinHS.snp.sum'%(outputdir)):
+    donor = os.path.split(files)[-1].split('.withinHS.snp.sum')[0]
+    for lines in open(files, 'r'):
+        alloutput.append('%s\t' % (donor) + lines)
+
+f1 = open('%s/all.withinHS.snp.sum'%(outputdir),'w')
+f1.write(''.join(alloutput))
+f1.close()
+
+outputdir = '/scratch/users/anniz44/genomes/donor_species/MG/summary/other'
+alloutput = []
+os.system('rm %s'%('%s/all.other.snp.sum'%(outputdir)))
+for files in glob.glob('%s/*other.snp.sum'%(outputdir)):
+    donor = os.path.split(files)[-1].split('.other.snp.sum')[0]
+    for lines in open(files, 'r'):
+        alloutput.append('%s\t' % (donor) + lines)
+
+f1 = open('%s/all.other.snp.sum'%(outputdir),'w')
+f1.write(''.join(alloutput))
+f1.close()
 
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
@@ -9560,6 +9588,7 @@ def to_distance(tree):
 filename_tree = '1_BL_IBD_0_clustercluster1.donor.D77.all.parsi.fasta.out.tree'
 tree = Phylo.read(filename_tree, "newick")
 to_distance(tree)
+
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
 # move MG results
@@ -9607,6 +9636,335 @@ for snpfile in glob.glob('%s/finished/*.zip'%(result_dir)):
     except IOError:
         pass
     os.system('mv %s %s/'%(snpfile,outputdir))
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# PE truncation
+import os,glob
+snp_dir = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge'
+
+def loadHS(sum_file):
+    HS_gene = dict()
+    for lines in open(sum_file, 'r'):
+        if not lines.startswith("#donor_species"):
+            lines_set = lines.split('\n')[0].split('\t')
+            if lines_set[-1] == 'True':
+                lineage, gene = lines_set[0:2]
+                HS_gene.setdefault(lineage,set())
+                HS_gene[lineage].add(gene)
+    return HS_gene
+
+def load_snp(snpfile,alloutput):
+    donor_species = os.path.split(snpfile)[-1].split('.raw.vcf.filtered.vcf.final.removerec.snp.txt')[0].replace('.all','')
+    if donor_species in HS_gene_all:
+        for lines in open(snpfile,'r'):
+            lines_set = lines.split('\n')[0].split('\t')
+            genename, POS,N_or_S,AAchange = lines_set[-4:]
+            genenamenew, POS = lines_set[:2]
+            if '*' in AAchange:
+                if donor_species in HS_gene_within and genename in HS_gene_within[donor_species]:
+                    alloutput.add('%s\t%s\t%s\t%s\t%s\twithinHS\t\n'%(donor_species,genenamenew,POS,AAchange[0],AAchange[1]))
+                elif genename in HS_gene_all[donor_species]:
+                    alloutput.add('%s\t%s\t%s\t%s\t%s\tacrossHS\t\n'%(donor_species,genenamenew,POS,AAchange[0],AAchange[1]))
+    else:
+        print('no HS in %s'%(donor_species))
+    return alloutput
+
+# load HS genes
+HS_gene_within = loadHS('%s/summary/all.species.txt'%(snp_dir))
+HS_gene_all = loadHS('%s/summary/all.species.txt.High_select2.txt'%(snp_dir))
+
+alloutput=set()
+snp_folder = glob.glob('%s/*.donor.*.raw.vcf.filtered.vcf.final.removerec.snp.txt' % (snp_dir))
+for snpfile in snp_folder:
+    alloutput = load_snp(snpfile,alloutput)
+
+f1 = open('%s/summary/all.species.txt.High_select2.txt.Truncated.sum'%(snp_dir), 'w')
+f1.write(''.join(list(alloutput)))
+f1.close()
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# genomic diversity among strains carried different PE alleles of the same lineage
+import os,glob
+allmultisnp = '/scratch/users/anniz44/genomes/donor_species/MG/summary/all.withinHS.snp.genename.depthcheck.count.multigenotype.sum'
+changename = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/summary/all.selected.gene.faa.changename.txt'
+genome_dir1 = '/scratch/users/anniz44/genomes/donor_species/selected_species/round1/'
+genome_dir2 = '/scratch/users/mit_alm/IBD_Evo/BA/Assembly_for_gene_flow/'
+genome_dir3 = '/scratch/users/mit_alm/IBD_Evo/BL/Assembly_for_gene_flow/'
+genome_dir4 = '/scratch/users/mit_alm/IBD_Evo/PB/Assembly_for_gene_flow/'
+snpfolder = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/'
+outputdir = '/scratch/users/anniz44/genomes/donor_species/MG/fastani'
+outputscript = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/fastani'
+try:
+    os.mkdir(outputdir)
+except IOError:
+    pass
+
+try:
+    os.mkdir(outputscript)
+except IOError:
+    pass
+
+def loadsnpfile(snpfile, positionset):
+    genomeset = dict()
+    genomeorder = dict()
+    for lines in open(snpfile,'r'):
+        lines_set = lines.split('\n')[0].split('\t')
+        if lines.startswith('CHR'):
+            i = 9
+            for genome in lines_set[9:]:
+                genomeorder.setdefault(i,genome)
+                i += 1
+        else:
+            CHRPOS = '%s\t%s'%(lines_set[0],lines_set[1])
+            if CHRPOS in positionset:
+                major, minor = lines_set[2:4]
+                genomeset.setdefault(CHRPOS,[[major,set()],[minor,set()]])
+                i = 9
+                for alleles in lines_set[9:]:
+                    if alleles == major:
+                        genomeset[CHRPOS][0][-1].add(genomeorder[i])
+                    elif alleles == minor:
+                        genomeset[CHRPOS][1][-1].add(genomeorder[i])
+                    i += 1
+    return genomeset
+
+def findfasta(lineage,genomename):
+    if lineage.startswith('1_'):
+        fasta = glob.glob('%s/%s/scaffolds.fasta' % (genome_dir2, genomename))+\
+        glob.glob('%s/%s/scaffolds.fasta' % (genome_dir3, genomename))+\
+        glob.glob('%s/%s/scaffolds.fasta' % (genome_dir4, genomename))
+    else:
+        fasta = glob.glob('%s/%s/fasta/%s_final.scaffolds.fasta' % (genome_dir1, genomename.split('_g')[0], genomename))
+    return fasta[0]
+
+def run_fastani(genomeset,lineage):
+    for CHRPOS in genomeset:
+        genomeset1,genomeset2=genomeset[CHRPOS]
+        genomeset1out = set()
+        genomeset2out = set()
+        CHRPOSset = CHRPOS.split('\t')
+        for genome in genomeset1[-1]:
+            genomeset1out.add(findfasta(lineage,genome))
+        for genome in genomeset2[-1]:
+            genomeset2out.add(findfasta(lineage,genome))
+        outputname1 = '%s__%s__%s__%s'%(lineage,CHRPOSset[0],CHRPOSset[1],genomeset1[0])
+        outputname2 = '%s__%s__%s__%s' % (lineage, CHRPOSset[0], CHRPOSset[1], genomeset2[0])
+        f1 = open('%s/%s.list'%(outputdir,outputname1),'w')
+        f1.write('\n'.join(list(genomeset1out))+'\n')
+        f1.close()
+        f1 = open('%s/%s.list' % (outputdir, outputname2), 'w')
+        f1.write('\n'.join(list(genomeset2out))+'\n')
+        f1.close()
+        command = ('fastANI --rl %s --ql %s -o %s \n' %
+                    ('%s/%s.list'%(outputdir,outputname1), '%s/%s.list'%(outputdir,outputname1),
+                     '%s/%s.fastaniout' % (outputdir, outputname1)))
+        command += ('fastANI --rl %s --ql %s -o %s \n' %
+                   ('%s/%s.list' % (outputdir, outputname2), '%s/%s.list' % (outputdir, outputname2),
+                    '%s/%s.fastaniout' % (outputdir, outputname2)))
+        f1 = open('%s/%s.sh' % (outputscript, outputname1), 'w')
+        f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (command))
+        f1.close()
+
+newgenename = dict()
+for lines in open(changename,'r'):
+    lines_set = lines.split('\n')[0].split('\t')
+    newgenename.setdefault(lines_set[3],lines_set[2])
+
+donorspecies = dict()
+for lines in open(allmultisnp,'r'):
+    if not lines.startswith('subgroupnew'):
+        lines_set = lines.split('\t')
+        lineage = lines_set[0].split('__')[0].replace('_CL','_clustercluster')
+        donorspecies.setdefault(lineage,
+                                set())
+        donorspecies[lineage].add('%s\t%s'%('_'.join(newgenename[lines_set[0].split(' ')[0]].split('_')[:-1]),
+                                            lines_set[0].split(' ')[1]))
+for lineage in donorspecies:
+    snpfile = '%s/%s.all.parsi.fasta.sum.txt'%(snpfolder,lineage)
+    positionset = donorspecies[lineage]
+    genomeset = loadsnpfile(snpfile, positionset)
+    run_fastani(genomeset,lineage)
+
+f1 = open(os.path.join(outputscript, '../allfastani.sh'), 'w')
+f1.write('#!/bin/bash\nsource ~/.bashrc\n')
+for sub_scripts in glob.glob(os.path.join(outputscript, '*.sh')):
+    f1.write('jobmit %s %s\n' % (sub_scripts, os.path.split(sub_scripts)[-1]))
+
+f1.close()
+print('please run %s/../allfastani.sh'%(outputscript))
+
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# sum up fastani for genomic diversity among strains carried different PE alleles of the same lineage
+import os,glob
+outputdir = '/scratch/users/anniz44/genomes/donor_species/MG/fastani'
+
+alloutput = []
+for files in glob.glob('%s/*.fastaniout'%(outputdir)):
+    donor_species_allele = os.path.split(files)[-1].split('.fastaniout')[0]
+    for lines in open(files,'r'):
+        alloutput.append(
+            '%s\t%s'%(donor_species_allele,lines)
+        )
+
+f1 = open('%s/allfastaniout.sum'%(outputdir),'w')
+f1.write('allele\tgenome1\tgenome2\tani\tgenemap\ttotalgenes\n')
+f1.write(''.join(alloutput))
+f1.close()
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# sum up ref genome gene length and non-ORF length
+import os,glob
+from Bio import SeqIO
+from Bio.Seq import Seq
+import statistics
+
+assemblyfolder1 = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/co-assembly/'
+assemblyfolder2 = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/co-assembly/withPE/'
+fasta = '.all.spades1.fasta.noHM.fasta'
+outputfile = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/summary/clonal_genelength.txt'
+
+alloutput = []
+for files in glob.glob('%s/*/*%s'%(assemblyfolder1,fasta))+glob.glob('%s/*/*%s'%(assemblyfolder2,fasta)):
+    donor_species = os.path.split(files)[-1].split(fasta)[0]
+    total_length = 0
+    total_genelength = []
+    for record in SeqIO.parse(files, 'fasta'):
+        total_length += len(str(record.seq))
+    for record in SeqIO.parse(files + '.fna', 'fasta'):
+        total_genelength.append(len(str(record.seq)))
+    alloutput.append('%s\t%s\t%.1f\n'%(donor_species.replace('_PB_','_PaDi_'),
+                                       total_length - sum(total_genelength),
+                                       statistics.mean(total_genelength)))
 
 
+f1 = open('%s'%(outputfile),'w')
+f1.write('donor_species\tnonORFlength\tavgORFlength\n')
+f1.write(''.join(alloutput))
+f1.close()
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# sum up SNPs across lineages
+import os,glob
+SNPfiles = glob.glob('/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/*.all.parsi.fasta.sum.txt')
+HSfileout = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/summary/all.species.txt.High_select2.txt.multipledonor.txt'
+cluster_file = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/summary/all.denovo.gene.faa.uc'
 
+Clusters = dict()
+for lines in open(cluster_file, 'r'):
+    line_set = lines.split('\n')[0].split('\t')
+    cluster = line_set[1]
+    record_name = line_set[8]
+    Clusters.setdefault(record_name, cluster)
+
+HSsum = dict()
+genetocluster = dict()
+for aSNPfile in SNPfiles:
+    donor_species = os.path.split(aSNPfile)[-1].split('.all.parsi.fasta.sum.txt')[0]
+    CL = donor_species.split('.donor.')[0]
+    donor = donor_species.split('.donor.')[1]
+    donor_species_new = donor_species.replace('_clustercluster', '_CL').replace('PB_', 'PaDi_')
+    for lines in open(aSNPfile,'r'):
+        if not lines.startswith('CHR'):
+            lines_set = lines.split('\n')[0].split('\t')
+            genename = lines_set[5]
+            POS = lines_set[6]
+            if genename == 'None':
+                genename = lines_set[0]
+                POS = lines_set[1]
+                newgenename = '%s\t%s\t%s\tNone\t' % (CL, genename, POS)
+            else:
+                genename2 = '%s__C_%s_G_%s' % (donor_species_new, genename.split('_')[1], genename.split('_')[-1])
+                cluster = Clusters.get(genename2)
+                newgenename = '%s\t%s' % (cluster,POS)
+                genetocluster.setdefault(newgenename,set())
+                genetocluster[newgenename].add('%s\t%s\t%s\t%s' % (CL, genename, POS,genename2))
+            HSsum.setdefault(newgenename, set())
+            HSsum[newgenename].add(donor)
+
+alloutput = []
+for newgenename in HSsum:
+    donorcutoff = 2
+    donornum = len(HSsum[newgenename])
+    if donornum >= donorcutoff:
+        if newgenename in genetocluster:
+            for oldgenename in genetocluster[newgenename]:
+                alloutput.append('%s\t%s\t%s\t\n' % (oldgenename,newgenename, donornum))
+        else:
+            alloutput.append('%s\tNone\tNone\t%s\t\n'%(newgenename,donornum))
+
+f1 = open('%s'%(HSfileout),'w')
+f1.write('Refgenome\tgenename\tPOS\tnewgenename\tcluster\tPOS2\tnum_donor\t\n')
+f1.write(''.join(alloutput))
+f1.close()
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# test MG filter
+import os,glob
+allvcffiles = glob.glob('/scratch/users/anniz44/genomes/donor_species//MG/bwa/*.vcf')
+outputvcf = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/testMG.sh'
+fastaformat = '.fasta'
+cmds = '#!/bin/bash\nsource ~/.bashrc\npy37\n'
+for vcffile in allvcffiles:
+    cmds += 'python /scratch/users/anniz44/scripts/1MG/donor_species/assembly/SNPfilter_meta.py -vcf %s -snp /scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/ -mfq %s -o /scratch/users/anniz44/genomes/donor_species/\n'%(vcffile,fastaformat)
+
+cmds += 'python SNPsum_meta.py  -o /scratch/users/anniz44/genomes/donor_species/\n'
+
+f1 = open('%s'%(outputvcf),'w')
+f1.write(''.join(cmds))
+f1.close()
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# re run MG filtering
+import os,glob
+outputdir = '/scratch/users/anniz44/genomes/donor_species/MG/bwa/'
+allvcffiles = glob.glob('/scratch/users/anniz44/genomes/donor_species//MG/bwa/finished/*/*.vcf.zip')
+outputscript = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/refilterMG/'
+outputvcf = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/refilterMG.sh'
+
+os.system('rm -r %s'%(outputscript))
+try:
+    os.mkdir(outputscript)
+except IOError:
+    pass
+
+cmdsall = '#!/bin/bash\nsource ~/.bashrc\n'
+i = 0
+cmds = '#!/bin/bash\nsource ~/.bashrc\npy37\n'
+for vcffile in allvcffiles:
+    i += 1
+    if (i%2000) == 0:
+        f1 = open('%s/refilterMG.%s.sh'%(outputscript,int(i/2000)),'a')
+        f1.write(''.join(cmds))
+        f1.close()
+        cmds = '#!/bin/bash\nsource ~/.bashrc\npy37\n'
+        cmdsall += 'jobmit %s %s\n'%('%s/refilterMG.%s.sh'%(outputscript,int(i/2000)),
+                                     'refilterMG.%s.sh' % (int(i / 2000)))
+    tempoutputfolder = '%s/refilterMG_%s'%(outputscript,int(i/2000))
+    try:
+        os.mkdir(tempoutputfolder)
+    except IOError:
+        pass
+    cmds += 'unzip %s -d %s\n'%(vcffile,tempoutputfolder)
+    cmds += 'mv %s/scratch/users/anniz44/genomes/donor_species//MG/bwa/*.vcf %s/\n'%(tempoutputfolder,outputdir)
+    cmds += 'rm -r %s/scratch/\n'%(tempoutputfolder)
+    newvcffile = os.path.join(outputdir,os.path.split(vcffile)[-1].split('.zip')[0])
+    if '.fasta' in newvcffile:
+        fastaformat = '.fasta'
+    else:
+        fastaformat = '.1.fq'
+    cmds += 'python /scratch/users/anniz44/scripts/1MG/donor_species/assembly/SNPfilter_meta.py -vcf %s -snp /scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/ -mfq %s -o /scratch/users/anniz44/genomes/donor_species/\n'%(newvcffile,fastaformat)
+    cmds += 'rm %s\n'%(newvcffile)
+
+f1 = open('%s/refilterMG.%s.sh'%(outputscript,int(i/2000)),'a')
+f1.write(''.join(cmds))
+f1.close()
+cmdsall += 'jobmit %s %s\n'%('%s/refilterMG.%s.sh'%(outputscript,int(i/2000)),
+                                     'refilterMG.%s.sh' % (int(i / 2000)))
+
+cmdsall += '#python SNPsum_meta.py  -o /scratch/users/anniz44/genomes/donor_species/\n'
+f1 = open('%s'%(outputvcf),'w')
+f1.write(''.join(cmdsall))
+f1.close()
+################################################### END ########################################################
+################################################### SET PATH ########################################################

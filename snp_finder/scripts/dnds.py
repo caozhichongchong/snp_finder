@@ -655,9 +655,6 @@ Core = dict()
 if args.core != 'None':
     for lines in open(args.core):
         lines_set = lines.replace('\n', '').replace('\r', '').split('\t')
-        #donor_species = lines_set[-3]
-        #geneID = lines_set[-1]
-        #core = lines_set[-4]
         geneID = lines_set[0]
         core = lines_set[-1]
         Core.setdefault(geneID,core)

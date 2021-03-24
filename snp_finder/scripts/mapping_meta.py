@@ -48,6 +48,10 @@ optional.add_argument('-job',
                       metavar="nohup or customized",
                       action='store', default='jobmit', type=str)
 # requirement for software calling
+optional.add_argument('-bw',
+                          help="Optional: complete path to bowtie2 if not in PATH",
+                          metavar="/usr/local/bin/bowtie2",
+                          action='store', default='bowtie2', type=str)
 optional.add_argument('-dm',
                           help="Optional: complete path to diamond if not in PATH",
                           metavar="/usr/local/bin/diamond",
@@ -116,41 +120,42 @@ Total_job = max(int(len(allfastq)*len(alldatabase)/250),1)
 i = 0
 cmds = ''
 cmdssum = ''
+outputall = set()
 for database in alldatabase:
     donor_species = os.path.split(database)[-1].split('.all')[0]
     try:
         f1 = open(database + '.mmi')
     except IOError:
         os.system('minimap2 -d %s.mmi %s \n' % (database, database))
+    try:
+        f1 = open(database + '.1.bt2')
+    except IOError:
+        os.system(os.path.join(os.path.split('args.bw')[0], 'bowtie2-build') + ' %s %s\n' % (
+            database, database))
     for files in allfastq:
-        donor_species_dir_file = os.path.split(files)[-1]
+        donor_species_dir_file = os.path.split(files)[-1].replace('.filter.trim.rmhost','')
         tempbamoutput = os.path.join(output_dir + '/bwa', donor_species_dir_file + '.' + donor_species)
-        try:
-            f1 = open(tempbamoutput + '.raw.vcf')
+        tempbamoutputfinished = os.path.join(output_dir + '/bwa/finished/%s'%(donor_species),
+                                             donor_species_dir_file + '.' + donor_species + '.raw.vcf.zip')
+        depthfile = os.path.join(output_dir + '/covsum/%s'%(donor_species),
+                                             donor_species_dir_file + '.' + donor_species + '.raw.vcf.depth.MV.sum')
+        if tempbamoutput not in outputall:
+            outputall.add(tempbamoutput)
             try:
-                f1 = open(tempbamoutput + '.raw.vcf.depth.MV.sum')
-            except IOError:
-                cmdssum += 'python /scratch/users/anniz44/scripts/1MG/donor_species/assembly/SNPfilter_meta.py -vcf %s -snp %s -mfq %s -o %s \n' % (
-                tempbamoutput + '.raw.vcf',
-                args.snp, args.mfq, args.o)
-        except IOError:
-            try:
-                tempbamoutputfinish = os.path.join(output_dir + '/bwa/finished', donor_species_dir_file + '.' + donor_species)
-                f1 = open(tempbamoutputfinish + '.raw.vcf.zip')
+                f1 = open(tempbamoutputfinished)
             except IOError:
                 if 'fasta' in fastq_name:
-                    cmds += args.mini + ' -ax sr -N 1000 -p 0.99 -t %s %s.mmi %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
+                    cmds += 'time ' + args.bw + ' -f --threads %s -x %s -U %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n' % (
                         min(40, args.t), database, files, args.sam, min(40, args.t),
-                        tempbamoutput, args.sam, min(40, args.t), tempbamoutput, tempbamoutput, args.sam,
-                        min(40, args.t),
-                        tempbamoutput)
+                        tempbamoutput, args.sam, min(40, args.t), tempbamoutput, tempbamoutput)
                 else:
-                    cmds += args.mini + ' -ax sr -N 1000 -p 0.99 -t %s %s.mmi %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n%s index -@ %s %s.sorted.bam\n' % (
+                    cmds += 'time ' +args.bw + ' --threads %s -x %s -U %s |%s view -@ %s -S -b >%s.bam\n%s sort -@ %s %s.bam -o %s.sorted.bam\n' % (
                         min(40, args.t), database, files, args.sam, min(40, args.t),
-                        tempbamoutput, args.sam, min(40, args.t), tempbamoutput, tempbamoutput, args.sam,
+                        tempbamoutput, args.sam, min(40, args.t), tempbamoutput, tempbamoutput)
+                cmds += 'time ' +'%s index -@ %s %s.sorted.bam\n'%(args.sam,
                         min(40, args.t),
                         tempbamoutput)
-                cmds += '%s mpileup --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -q10 -Ou -B -d3000 -f %s %s.sorted.bam | %s call -c -Ov --threads %s > %s.raw.vcf\n' % (
+                cmds += 'time ' +'%s mpileup --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -q10 -Ou -B -d3000 -f %s %s.sorted.bam | %s call -c -Ov --threads %s > %s.raw.vcf\n' % (
                     args.bcf, min(40, args.t), database,
                     tempbamoutput, args.bcf, min(40, args.t), tempbamoutput)
                 cmds += 'rm -rf %s.bam %s.bam.bai %s.sorted.bam %s.sorted.bam.bai\n' % (
@@ -158,17 +163,19 @@ for database in alldatabase:
                 try:
                     f1 = open(tempbamoutput + '.raw.vcf.depth.MV.sum')
                 except IOError:
-                    cmds += 'py37\npython /scratch/users/anniz44/scripts/1MG/donor_species/assembly/SNPfilter_meta.py -vcf %s -snp %s -mfq %s -o %s \n'%(tempbamoutput + '.raw.vcf',
-                                                                                                                                               args.snp, args.mfq, args.o)
+                    cmds += 'py37\npython /scratch/users/anniz44/scripts/1MG/donor_species/assembly/SNPfilter_meta.py -vcf %s -snp %s -mfq %s -o %s \nsource deactivate py37\n' % (
+                    tempbamoutput + '.raw.vcf',
+                    args.snp, args.mfq, args.o)
                 i += 1
                 if i % Total_job == 0:
                     f1 = open(os.path.join(input_script_sub, '%s.vcf.sh' % int(i / Total_job)), 'a')
-                    f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n%s' % (''.join(cmds)))
+                    f1.write('#!/bin/bash\nsource ~/.bashrc\nset -x \n%s' % (''.join(cmds)))
                     f1.close()
                     cmds = ''
     f1 = open(os.path.join(input_script_sub, '%s.vcf.sh' % int(i / Total_job)), 'a')
     f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
     f1.close()
+    cmds = ''
 
 f1 = open(os.path.join(input_script, 'allMGvcf.sh'), 'w')
 f1.write('#!/bin/bash\nsource ~/.bashrc\n')
