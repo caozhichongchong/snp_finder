@@ -42,7 +42,7 @@ try:
 except IOError:
     pass
 try:
-    os.mkdir(args.o + '/MG/snpsum/')
+    os.mkdir(args.o + '/MG/snpsumalldepth/')
 except IOError:
     pass
 
@@ -180,7 +180,7 @@ class SNP_lineage:
         for CHR_POS in self.position:
             Major_ALT, Minor_ALT, Major_ALT_freq, Minor_ALT_freq, other_freq,withinHS,allHS,acrossdonor,genename = self.position[CHR_POS]
             allsum.append('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t\n'%(CHR_POS,Major_ALT, Minor_ALT, Major_ALT_freq, Minor_ALT_freq, other_freq,withinHS,allHS,acrossdonor,genename))
-        outputfolder = args.o + '/MG/snpsum/' + self.lineage
+        outputfolder = args.o + '/MG/snpsumalldepth/' + self.lineage
         try:
             os.mkdir(outputfolder)
         except IOError:
@@ -193,6 +193,7 @@ class SNP_lineage:
 
 def load_snp(snp_folder):
     allsnp = []
+    chrrange = dict()
     for snp_file in snp_folder:
         lineage = os.path.split(snp_file)[-1].split('.all.parsi.fasta.sum.txt')[0]
         print(lineage)
@@ -202,6 +203,10 @@ def load_snp(snp_folder):
             if not lines.startswith("CHR\tPOS"):
                 lines_set = lines.split('\t')
                 CHR,POS,Major_ALT,Minor_ALT = lines_set[0:4]
+                POS = int(POS)
+                chrrange.setdefault(CHR,[max(POS-5000,0),POS+5000])
+                chrrange[CHR][0]=min(max(POS-5000,0),chrrange[CHR][0])
+                chrrange[CHR][1] = max(POS+5000, chrrange[CHR][1])
                 CHR_POS = '%s\t%s'%(CHR,POS)
                 genePOS = CHR_POS
                 genename = lines_set[5]
@@ -218,18 +223,30 @@ def load_snp(snp_folder):
                     acrossdonor = 'True'
                 temp_SNP_lineage.addSNP(CHR_POS,Major_ALT,Minor_ALT,withinHS,allHS,acrossdonor,genename)
         allsnp.append(temp_SNP_lineage)
-    return allsnp
+    return [allsnp,chrrange]
 
-def get_snp(allsnp,lines_set):
+def get_snp(allsnp,chrrange,lines_set):
     CHR,POS = lines_set[0:2]
+    POS = int(POS)
     CHR_POS = '%s\t%s' % (CHR, POS)
+    Major_ALTmeta, Minor_ALTmeta = lines_set[3:5]
+    Depth4 = lines_set[7].split('DP4=')[1].split(';')[0].split(',')
+    Major_ALTmeta_freq = int(Depth4[0]) + int(Depth4[1])
+    Minor_ALTmeta_freq = int(Depth4[2]) + int(Depth4[3])
     for temp_SNP_lineage in allsnp:
-        if CHR_POS in temp_SNP_lineage.position:
-            Major_ALTmeta, Minor_ALTmeta = lines_set[3:5]
-            Depth4 = lines_set[7].split('DP4=')[1].split(';')[0].split(',')
-            Major_ALTmeta_freq = int(Depth4[0]) + int(Depth4[1])
-            Minor_ALTmeta_freq = int(Depth4[2]) + int(Depth4[3])
+        if CHR_POS  in temp_SNP_lineage.position:
             temp_SNP_lineage.mapSNP(CHR_POS, Major_ALTmeta, Minor_ALTmeta, Major_ALTmeta_freq, Minor_ALTmeta_freq)
+        elif CHR_POS not in temp_SNP_lineage.position and Major_ALTmeta_freq + Minor_ALTmeta_freq > 0:
+            #if CHR in chrrange:
+            #    if POS >= chrrange[CHR][0] and POS <= chrrange[CHR][1]:
+                    # pick CHR POS within +- 5000bp of true SNPs
+                    Major_ALT,Minor_ALT = lines_set[3:5]
+                    genename = 'None'
+                    withinHS = 'False'
+                    allHS = 'False'
+                    acrossdonor = 'False'
+                    temp_SNP_lineage.addSNP(CHR_POS, Major_ALT, Minor_ALT, withinHS, allHS, acrossdonor, genename)
+                    temp_SNP_lineage.mapSNP(CHR_POS, Major_ALTmeta, Minor_ALTmeta, Major_ALTmeta_freq, Minor_ALTmeta_freq)
 
 def sum_snp(allsnp,samplename):
     for temp_SNP_lineage in allsnp:
@@ -273,7 +290,7 @@ for vcf_file in all_vcf_file:
     print('processing',samplename,donorspecies)
     snp_folder = glob.glob('%s/%s.*.all.parsi.fasta.sum.txt'%(args.snp,donorspecies))
     print(snp_folder)
-    allsnp = load_snp(snp_folder)
+    allsnp,chrrange = load_snp(snp_folder)
     Donorspecies_sample = dict()
     Donorspecies_sample_MV = dict()
     Length = dict()
@@ -290,7 +307,7 @@ for vcf_file in all_vcf_file:
                 if not ',' in lines_set[4]:
                     # check mapping quality and no >2 genotypes
                     # map snp to snps found in a lineage
-                    get_snp(allsnp,lines_set)
+                    get_snp(allsnp,chrrange,lines_set)
     if checkdepth:
         # summarize depth
         depth_sum(Donorspecies_sample, Length,vcf_file)

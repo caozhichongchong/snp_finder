@@ -9869,16 +9869,17 @@ for aSNPfile in SNPfiles:
             lines_set = lines.split('\n')[0].split('\t')
             genename = lines_set[5]
             POS = lines_set[6]
+            N_S = lines_set[4]
             if genename == 'None':
                 genename = lines_set[0]
                 POS = lines_set[1]
-                newgenename = '%s\t%s\t%s\tNone\t' % (CL, genename, POS)
+                newgenename = '%s\t%s\t%s\tNone\t%s' % (CL, genename, POS,N_S)
             else:
                 genename2 = '%s__C_%s_G_%s' % (donor_species_new, genename.split('_')[1], genename.split('_')[-1])
                 cluster = Clusters.get(genename2)
                 newgenename = '%s\t%s' % (cluster,POS)
                 genetocluster.setdefault(newgenename,set())
-                genetocluster[newgenename].add('%s\t%s\t%s\t%s' % (CL, genename, POS,genename2))
+                genetocluster[newgenename].add('%s\t%s\t%s\t%s\t%s' % (CL, genename, POS,genename2,N_S))
             HSsum.setdefault(newgenename, set())
             HSsum[newgenename].add(donor)
 
@@ -9889,12 +9890,16 @@ for newgenename in HSsum:
     if donornum >= donorcutoff:
         if newgenename in genetocluster:
             for oldgenename in genetocluster[newgenename]:
-                alloutput.append('%s\t%s\t%s\t\n' % (oldgenename,newgenename, donornum))
+                alloutput.append('%s\t%s\t%s\t%s\t\n' % (oldgenename,newgenename, donornum,
+                                                         ';'.join(list(HSsum[newgenename]))
+                                                         ))
         else:
-            alloutput.append('%s\tNone\tNone\t%s\t\n'%(newgenename,donornum))
+            alloutput.append('%s\tNone\tNone\t%s\t%s\t\n'%(newgenename,donornum,
+                                                         ';'.join(list(HSsum[newgenename]))
+                                                           ))
 
 f1 = open('%s'%(HSfileout),'w')
-f1.write('Refgenome\tgenename\tPOS\tnewgenename\tcluster\tPOS2\tnum_donor\t\n')
+f1.write('Refgenome\tgenename\tPOS\tnewgenename\tN_or_S\tcluster\tPOS2\tnum_donor\tdonor_list\t\n')
 f1.write(''.join(alloutput))
 f1.close()
 ################################################### END ########################################################
@@ -9921,7 +9926,7 @@ outputdir = '/scratch/users/anniz44/genomes/donor_species/MG/bwa/'
 allvcffiles = glob.glob('/scratch/users/anniz44/genomes/donor_species//MG/bwa/finished/*/*.vcf.zip')
 outputscript = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/refilterMG/'
 outputvcf = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/refilterMG.sh'
-
+jub_num = 200
 os.system('rm -r %s'%(outputscript))
 try:
     os.mkdir(outputscript)
@@ -9933,14 +9938,14 @@ i = 0
 cmds = '#!/bin/bash\nsource ~/.bashrc\npy37\n'
 for vcffile in allvcffiles:
     i += 1
-    if (i%2000) == 0:
-        f1 = open('%s/refilterMG.%s.sh'%(outputscript,int(i/2000)),'a')
+    if (i%jub_num) == 0:
+        f1 = open('%s/refilterMG.%s.sh'%(outputscript,int(i/jub_num)),'a')
         f1.write(''.join(cmds))
         f1.close()
         cmds = '#!/bin/bash\nsource ~/.bashrc\npy37\n'
-        cmdsall += 'jobmit %s %s\n'%('%s/refilterMG.%s.sh'%(outputscript,int(i/2000)),
-                                     'refilterMG.%s.sh' % (int(i / 2000)))
-    tempoutputfolder = '%s/refilterMG_%s'%(outputscript,int(i/2000))
+        cmdsall += 'jobmit %s %s\n'%('%s/refilterMG.%s.sh'%(outputscript,int(i/jub_num)),
+                                     'refilterMG.%s.sh' % (int(i / jub_num)))
+    tempoutputfolder = '%s/refilterMG_%s'%(outputscript,int(i/jub_num))
     try:
         os.mkdir(tempoutputfolder)
     except IOError:
@@ -9956,15 +9961,106 @@ for vcffile in allvcffiles:
     cmds += 'python /scratch/users/anniz44/scripts/1MG/donor_species/assembly/SNPfilter_meta.py -vcf %s -snp /scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/ -mfq %s -o /scratch/users/anniz44/genomes/donor_species/\n'%(newvcffile,fastaformat)
     cmds += 'rm %s\n'%(newvcffile)
 
-f1 = open('%s/refilterMG.%s.sh'%(outputscript,int(i/2000)),'a')
+f1 = open('%s/refilterMG.%s.sh'%(outputscript,int(i/jub_num)),'a')
 f1.write(''.join(cmds))
 f1.close()
-cmdsall += 'jobmit %s %s\n'%('%s/refilterMG.%s.sh'%(outputscript,int(i/2000)),
-                                     'refilterMG.%s.sh' % (int(i / 2000)))
+cmdsall += 'jobmit %s %s\n'%('%s/refilterMG.%s.sh'%(outputscript,int(i/jub_num)),
+                                     'refilterMG.%s.sh' % (int(i / jub_num)))
 
 cmdsall += '#python SNPsum_meta.py  -o /scratch/users/anniz44/genomes/donor_species/\n'
 f1 = open('%s'%(outputvcf),'w')
 f1.write(''.join(cmdsall))
 f1.close()
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# MG snp median depth
+import os,glob
+outputfile = '/scratch/users/anniz44/genomes/donor_species/MG/summary/all.lineage.depth.sum'
+alldepthfiles = glob.glob('/scratch/users/anniz44/genomes/donor_species/MG/covsum/*/*.raw.vcf.depth.sum')
+
+alloutput = []
+for files in alldepthfiles:
+    sample = os.path.split(files)[-1].split('.fasta')[0].split('.1.fq')[0]
+    lineage = os.path.split(os.path.split(files)[0])[-1]
+    totalloci = 0
+    depth_to_loci = dict()
+    alldepth = set()
+    for lines in open(files,'r'):
+        if not lines.startswith('CHR'):
+            lines_set = lines.split('\n')[0].split('\t')
+            depth = int(lines_set[1])
+            if depth > 0:
+                num_loci = int(lines_set[2])
+                alldepth.add(depth)
+                depth_to_loci.setdefault(depth,num_loci)
+                totalloci += num_loci
+    newtotalloci = 0
+    for depth in sorted(alldepth):
+        newtotalloci += depth_to_loci[depth]
+        if newtotalloci >= totalloci/2:
+            mediandepth = depth
+            break
+    alloutput.append('%s\t%s\t%.1f\t%s\n'%(sample,lineage,newtotalloci,totalloci))
+
+f1 = open('%s'%(outputfile),'w')
+f1.write('sample\tlineage\tmediandepth\ttotalloci\n')
+f1.write(''.join(alloutput))
+f1.close()
+
+################################################### END ########################################################
+################################################### SET PATH ########################################################
+# check all depth
+import os,glob
+outputdir = '/scratch/users/anniz44/genomes/donor_species/MG/bwa/'
+allvcffiles = glob.glob('/scratch/users/anniz44/genomes/donor_species//MG/bwa/finished/*/*.vcf.zip')
+outputscript = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/MGdepth/'
+outputvcf = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/MGdepth.sh'
+subset = ['SRR2938117.fasta.BA_clustercluster6','SRR2912781.fasta.1_BL_IBD_1_clustercluster4',
+          'SRR2938117.fasta.1_BL_IBD_1_clustercluster4','SRR2938079.fasta.1_BL_IBD_1_clustercluster4']
+os.system('rm -r %s'%(outputscript))
+try:
+    os.mkdir(outputscript)
+except IOError:
+    pass
+
+cmdsall = '#!/bin/bash\nsource ~/.bashrc\n'
+i = 0
+cmds = '#!/bin/bash\nsource ~/.bashrc\npy37\n'
+for vcffile in allvcffiles:
+    if any(vcfname in vcffile for vcfname in subset):
+        i += 1
+        if (i%2000) == 0:
+            f1 = open('%s/MGdepth.%s.sh'%(outputscript,int(i/2000)),'a')
+            f1.write(''.join(cmds))
+            f1.close()
+            cmds = '#!/bin/bash\nsource ~/.bashrc\npy37\n'
+            cmdsall += 'jobmit %s %s\n'%('%s/MGdepth.%s.sh'%(outputscript,int(i/2000)),
+                                         'MGdepth.%s.sh' % (int(i / 2000)))
+        tempoutputfolder = '%s/MGdepth_%s'%(outputscript,int(i/2000))
+        try:
+            os.mkdir(tempoutputfolder)
+        except IOError:
+            pass
+        cmds += 'unzip %s -d %s\n'%(vcffile,tempoutputfolder)
+        cmds += 'mv %s/scratch/users/anniz44/genomes/donor_species//MG/bwa/*.vcf %s/\n'%(tempoutputfolder,outputdir)
+        cmds += 'rm -r %s/scratch/\n'%(tempoutputfolder)
+        newvcffile = os.path.join(outputdir,os.path.split(vcffile)[-1].split('.zip')[0])
+        if '.fasta' in newvcffile:
+            fastaformat = '.fasta'
+        else:
+            fastaformat = '.1.fq'
+        cmds += 'python /scratch/users/anniz44/scripts/1MG/donor_species/assembly/SNPfilter_meta.allloci.py -vcf %s -snp /scratch/users/anniz44/genomes/donor_species/WGS/vcf_round1/merge/ -mfq %s -o /scratch/users/anniz44/genomes/donor_species/\n'%(newvcffile,fastaformat)
+        cmds += 'rm %s\n'%(newvcffile)
+
+f1 = open('%s/MGdepth.%s.sh'%(outputscript,int(i/2000)),'a')
+f1.write(''.join(cmds))
+f1.close()
+cmdsall += 'jobmit %s %s\n'%('%s/MGdepth.%s.sh'%(outputscript,int(i/2000)),
+                                     'MGdepth.%s.sh' % (int(i / 2000)))
+
+f1 = open('%s'%(outputvcf),'w')
+f1.write(''.join(cmdsall))
+f1.close()
+
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################

@@ -167,9 +167,9 @@ def output_sum(sumfiles,output_list_within,output_list_across,output_list_other,
             newlines = '\t'.join(lines_set[0:4]) + '\t%s\t%s\t%s\t%s'%(lines_set[10],samplename,sum_freq,Tag)
             if within_HS == 'True':
                 output_list_within = output_sum_sub(newlines, output_list_within, Major_freq, Minor_freq, other_freq)
-            elif HS_all == 'True':
+            if HS_all == 'True':
                 output_list_across = output_sum_sub(newlines, output_list_across, Major_freq, Minor_freq, other_freq)
-            elif acrossdonor == 'True':
+            if acrossdonor == 'True':
                 output_list_acrossdonor= output_sum_sub(newlines, output_list_acrossdonor, Major_freq, Minor_freq, other_freq)
             output_list_other = output_sum_sub(newlines, output_list_other, Major_freq, Minor_freq, other_freq)
 
@@ -208,7 +208,7 @@ for lineage in alllineage:
         f1.write(''.join(output_list_other))
         f1.close()
     if len(output_list_acrossdonor) > 0:
-        f1 = open(os.path.join(sumoutput_dir,'acrossdonor/%s.other.snp.sum'%(lineage)),'w')
+        f1 = open(os.path.join(sumoutput_dir,'acrossdonor/%s.acrossdonor.snp.sum'%(lineage)),'w')
         f1.write('CHR\tPOS\tMajor_ALT\tMinor_ALT\tgenename\tsamplename\tSum_freq\tMax_ALT\tFixed\tFreq\tFreq_tag\t\n')
         f1.write(''.join(output_list_acrossdonor))
         f1.close()
@@ -238,15 +238,15 @@ f1 = open('%s/all.other.snp.sum'%(outputdir),'w')
 f1.write(''.join(alloutput))
 f1.close()
 
-outputdir = '%s/acrossHS'%(sumoutput_dir)
+outputdir = '%s/acrossdonor'%(sumoutput_dir)
 alloutput = []
-os.system('rm %s'%('%s/all.acrossHS.snp.sum'%(outputdir)))
-for files in glob.glob('%s/*acrossHS.snp.sum'%(outputdir)):
-    donor = os.path.split(files)[-1].split('.acrossHS.snp.sum')[0]
+os.system('rm %s'%('%s/all.acrossdonor.snp.sum'%(outputdir)))
+for files in glob.glob('%s/*acrossdonor.snp.sum'%(outputdir)):
+    donor = os.path.split(files)[-1].split('.acrossdonor.snp.sum')[0]
     for lines in open(files, 'r'):
         alloutput.append('%s\t' % (donor) + lines)
 
-f1 = open('%s/all.acrossHS.snp.sum'%(outputdir),'w')
+f1 = open('%s/all.acrossdonor.snp.sum'%(outputdir),'w')
 f1.write(''.join(alloutput))
 f1.close()
 
