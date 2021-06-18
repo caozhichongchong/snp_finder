@@ -130,7 +130,7 @@ def sum_vcf(allvcf):
 def extract_donor_species(donor_species,input_fasta,gene_name_list,output_fasta):
     gene_name_extract = []
     record_id_set = set()
-    donor_species_new = donor_species.replace('_clustercluster','_CL')
+    donor_species_new = donor_species.replace('_clustercluster','_CL').replace('_PB_','_PaDi_')
     gene_name_list = set(gene_name_list)
     for record in SeqIO.parse(input_fasta, 'fasta'):
         record_id = str(record.id)
@@ -357,7 +357,7 @@ def add_new_selection(input_summary,High_select2):
                                  'allspecies_core', 'allspecies_flexible',
                                  'allspecies_highselect_noNS']:
                 genus, species = genus_species(donor_species)
-                donor_species_new = donor_species.replace('_clustercluster', '_CL')
+                donor_species_new = donor_species.replace('_clustercluster', '_CL').replace('_PB_','_PaDi_')
                 if 'NODE' in record_id:
                     record_id = '%s__C_%s_G_%s' % (donor_species_new, record_id.split('_')[1], record_id.split('_')[-1])
                 # highly selected genes
@@ -457,6 +457,7 @@ def annotation(all_filter_gene_fasta_file,pre_cluster = ''):
                    % (args.u, all_filter_gene_fasta_file, cutoff, all_filter_gene_fasta_file,
                       all_filter_gene_fasta_file, 40))
     os.system(cmd_cluster)
+    all_filter_gene_fasta_file2 = all_filter_gene_fasta_file2
     all_filter_gene_fasta_file = all_filter_gene_fasta_file + '.cluster.aa'
     if pre_cluster!= '':
         os.system('#%s -makeudb_usearch %s -output %s.udb' %
@@ -464,11 +465,12 @@ def annotation(all_filter_gene_fasta_file,pre_cluster = ''):
         os.system('%s -ublast %s -db %s.udb  -evalue 1e-2 -accel 0.5 -blast6out %s -threads 2'%
                   (args.u, all_filter_gene_fasta_file,pre_cluster, all_filter_gene_fasta_file + '.ref.out.txt'))
     # run prokka
-    cmdsprokka = 'py37\n%s --kingdom Bacteria --outdir %s/prokka_%s  --protein %s --locustag Bacter %s/%s\n' % \
-                 (args.prokka,output_dir_merge + '/summary', os.path.split(all_filter_gene_fasta_file)[-1],
-                  all_filter_gene_fasta_file,
+    cmdsprokka = 'py37\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n'+\
+    '%s --kingdom Bacteria --force --outdir %s/prokka_%s  --protein %s --locustag Bacter %s/%s\n' % \
+                 (args.prokka,output_dir_merge + '/summary', os.path.split(all_filter_gene_fasta_file2)[-1],
+                  all_filter_gene_fasta_file2,
                   output_dir_merge + '/summary',
-                  os.path.split(all_filter_gene_fasta_file)[-1].replace('.faa', '.fna'))
+                  os.path.split(all_filter_gene_fasta_file2)[-1].replace('.faa', '.fna'))
     f1 = open(os.path.join(input_script_sub, 'prokka.sh'), 'w')
     f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (cmdsprokka))
     f1.close()
@@ -476,7 +478,8 @@ def annotation(all_filter_gene_fasta_file,pre_cluster = ''):
     cutoff = 50
     cutoff2 = 80
     database = '/scratch/users/mit_alm/database/metacyc/protseq.fsa'
-    cmds = ("%s blastp --query %s --db %s.dmnd --out %s.metacyc.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+    cmds = ('py37\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n'+\
+            "%s blastp --query %s --db %s.dmnd --out %s.metacyc.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
             %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
     f1 = open(os.path.join(input_script_sub, 'metacyc.sh'), 'w')
     f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
@@ -555,6 +558,7 @@ def annotation(all_filter_gene_fasta_file,pre_cluster = ''):
 
 def annotation_all(all_filter_gene_fasta_file,pre_cluster = ''):
     # run cluster
+    all_filter_gene_fasta_file2 = all_filter_gene_fasta_file2
     all_filter_gene_fasta_file = all_filter_gene_fasta_file + '.cluster.aa'
     if pre_cluster!= '':
         os.system('#%s -makeudb_usearch %s -output %s.udb' %
@@ -562,11 +566,12 @@ def annotation_all(all_filter_gene_fasta_file,pre_cluster = ''):
         os.system('%s -ublast %s -db %s.udb  -evalue 1e-2 -accel 0.5 -blast6out %s -threads 2'%
                   (args.u, all_filter_gene_fasta_file,pre_cluster, all_filter_gene_fasta_file + '.ref.out.txt'))
     # run prokka
-    cmdsprokka = 'py37\n%s --kingdom Bacteria --outdir %s/prokka_%s  --protein %s --locustag Bacter %s/%s\n' % \
-                 (args.prokka,output_dir_merge + '/summary', os.path.split(all_filter_gene_fasta_file)[-1],
-                  all_filter_gene_fasta_file,
+    cmdsprokka = 'py37\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n'+\
+            '%s --kingdom Bacteria --force --outdir %s/prokka_%s  --protein %s --locustag Bacter %s/%s\n' % \
+                 (args.prokka,output_dir_merge + '/summary', os.path.split(all_filter_gene_fasta_file2)[-1],
+                  all_filter_gene_fasta_file2,
                   output_dir_merge + '/summary',
-                  os.path.split(all_filter_gene_fasta_file)[-1].replace('.faa', '.fna'))
+                  os.path.split(all_filter_gene_fasta_file2)[-1].replace('.faa', '.fna'))
     f1 = open(os.path.join(input_script_sub_all, 'prokka.sh'), 'w')
     f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (cmdsprokka))
     f1.close()
@@ -574,7 +579,8 @@ def annotation_all(all_filter_gene_fasta_file,pre_cluster = ''):
     cutoff = 50
     cutoff2 = 80
     database = '/scratch/users/mit_alm/database/metacyc/protseq.fsa'
-    cmds = ("%s blastp --query %s --db %s.dmnd --out %s.metacyc.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+    cmds = ('py37\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n'+\
+            "%s blastp --query %s --db %s.dmnd --out %s.metacyc.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
             %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
     f1 = open(os.path.join(input_script_sub_all, 'metacyc.sh'), 'w')
     f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
@@ -658,6 +664,7 @@ def annotation_trunc(all_filter_gene_fasta_file,pre_cluster = ''):
                    % (args.u, all_filter_gene_fasta_file, cutoff, all_filter_gene_fasta_file,
                       all_filter_gene_fasta_file, 40))
     os.system(cmd_cluster)
+    all_filter_gene_fasta_file2= all_filter_gene_fasta_file
     all_filter_gene_fasta_file = all_filter_gene_fasta_file + '.cluster.aa'
     if pre_cluster!= '':
         os.system('#%s -makeudb_usearch %s -output %s.udb' %
@@ -665,11 +672,12 @@ def annotation_trunc(all_filter_gene_fasta_file,pre_cluster = ''):
         os.system('%s -ublast %s -db %s.udb  -evalue 1e-2 -accel 0.5 -blast6out %s -threads 2'%
                   (args.u, all_filter_gene_fasta_file,pre_cluster, all_filter_gene_fasta_file + '.ref.out.txt'))
     # run prokka
-    cmdsprokka = 'py37\n%s --kingdom Bacteria --outdir %s/prokka_%s  --protein %s --locustag Bacter %s/%s\n' % \
-                 (args.prokka,output_dir_merge + '/summary', os.path.split(all_filter_gene_fasta_file)[-1],
-                  all_filter_gene_fasta_file,
+    cmdsprokka = 'py37\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n'+\
+                 '%s --kingdom Bacteria --force --outdir %s/prokka_%s  --protein %s --locustag Bacter %s/%s\n' % \
+                 (args.prokka,output_dir_merge + '/summary', os.path.split(all_filter_gene_fasta_file2)[-1],
+                  all_filter_gene_fasta_file2,
                   output_dir_merge + '/summary',
-                  os.path.split(all_filter_gene_fasta_file)[-1].replace('.faa', '.fna'))
+                  os.path.split(all_filter_gene_fasta_file2)[-1].replace('.faa', '.fna'))
     f1 = open(os.path.join(input_script_sub_trunc, 'prokka.sh'), 'w')
     f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (cmdsprokka))
     f1.close()
@@ -677,7 +685,8 @@ def annotation_trunc(all_filter_gene_fasta_file,pre_cluster = ''):
     cutoff = 50
     cutoff2 = 80
     database = '/scratch/users/mit_alm/database/metacyc/protseq.fsa'
-    cmds = ("%s blastp --query %s --db %s.dmnd --out %s.metacyc.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+    cmds = ('py37\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n'+\
+            "%s blastp --query %s --db %s.dmnd --out %s.metacyc.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
             %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
     f1 = open(os.path.join(input_script_sub_trunc, 'metacyc.sh'), 'w')
     f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
@@ -768,7 +777,7 @@ except IOError:
         gene_name_list = Donor_species[donor_species]
         if gene_name_list != []:
             print('processing %s' % donor_species)
-            database = glob.glob('%s/*/%s*%s' % (genome_root, donor_species.replace('1_PaDi','1_PB').split('donor')[0], ref_filename))[0]
+            database = glob.glob('%s/*/%s*%s' % (genome_root, donor_species.split('donor')[0].replace('_PaDi_','_PB_'), ref_filename))[0]
             ref_dir, ref_name = os.path.split(database)
             input_fasta = database + '.faa'
             input_fasta_dna = database + '.fna'
@@ -811,7 +820,7 @@ except IOError:
         gene_name_list = Donor_species[donor_species]
         if gene_name_list != []:
             print('processing %s' % donor_species)
-            database = glob.glob('%s/*/%s*%s' % (genome_root, donor_species.replace('1_PaDi','1_PB').split('donor')[0], ref_filename))
+            database = glob.glob('%s/*/%s*%s' % (genome_root, donor_species.split('donor')[0].replace('_PaDi_','_PB_'), ref_filename))
             database = database[0]
             ref_dir, ref_name = os.path.split(database)
             input_fasta = database + '.faa'
@@ -867,7 +876,7 @@ if args.trunc!= 'False':
             gene_name_list = Donor_species[donor_species]
             if gene_name_list != []:
                 print('processing %s' % donor_species)
-                database = glob.glob('%s/*/%s*%s' % (genome_root, donor_species.replace('1_PaDi','1_PB').split('donor')[0], ref_filename))[0]
+                database = glob.glob('%s/*/%s*%s' % (genome_root, donor_species.split('donor')[0].replace('_PaDi_','_PB_'), ref_filename))[0]
                 ref_dir, ref_name = os.path.split(database)
                 input_fasta = database + '.faa'
                 input_fasta_dna = database + '.fna'

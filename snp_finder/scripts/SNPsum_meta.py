@@ -16,6 +16,10 @@ optional.add_argument("-o",
                       help="a folder to store all output",
                       type=str, default='snp_output/',
                       metavar='snp_output/')
+optional.add_argument("-trunc",
+                      help="summary file of truncated genes",
+                      type=str, default='None',
+                      metavar='Trunc.sum')
 
 ################################################## Definition ########################################################
 args = parser.parse_args()
@@ -156,11 +160,14 @@ def output_sum_sub(newlines,output_list,Major_freq,Minor_freq,other_freq):
         output_list.append('%s\t%s\t%s\t\n' % (newlines, other_freq, 'Other'))
     return output_list
 
-def output_sum(sumfiles,output_list_within,output_list_across,output_list_other,output_list_acrossdonor):
+def output_sum(sumfiles,output_list_within,output_list_across,output_list_other,output_list_acrossdonor,output_trunc_within,output_trunc_other):
     samplename = os.path.split(sumfiles)[-1].split('.IN.')[0]
+    donor_species = os.path.split(sumfiles)[-1].split('.IN.')[1].split('.snp.sum')[0]
     for lines in open(sumfiles,'r'):
         if not lines.startswith("CHR\tPOS"):
             lines_set = lines.split('\t')
+            CHR, POS = lines_set[0:2]
+            donor_species_CHR_POS = '%s\t%s\t%s'%(donor_species,CHR,POS)
             Major_freq,Minor_freq,other_freq = lines_set[4:7]
             Major_freq, Minor_freq, other_freq, Tag, sum_freq = compute_freq(Major_freq,Minor_freq,other_freq)
             within_HS, HS_all,acrossdonor = lines_set[7:10]
@@ -171,11 +178,51 @@ def output_sum(sumfiles,output_list_within,output_list_across,output_list_other,
                 output_list_across = output_sum_sub(newlines, output_list_across, Major_freq, Minor_freq, other_freq)
             if acrossdonor == 'True':
                 output_list_acrossdonor= output_sum_sub(newlines, output_list_acrossdonor, Major_freq, Minor_freq, other_freq)
-            output_list_other = output_sum_sub(newlines, output_list_other, Major_freq, Minor_freq, other_freq)
+            if within_HS == 'False' and acrossdonor == 'False':
+                output_list_other = output_sum_sub(newlines, output_list_other, Major_freq, Minor_freq, other_freq)
+            if donor_species_CHR_POS in Trunc:
+                tag,trunc_SNP = Trunc[donor_species_CHR_POS]
+                # output minor allele == trunc_SNP
+                if trunc_SNP == lines_set[2]:
+                    # major allele == trunc_SNP
+                    Minor_freq, Major_freq, other_freq = lines_set[4:7]
+                    Major_freq, Minor_freq, other_freq, Tag, sum_freq = compute_freq(Major_freq, Minor_freq, other_freq)
+                    newlines = '\t'.join([lines_set[0],lines_set[1],lines_set[3],lines_set[2]]) + '\t%s\t%s\t%s\t%s' % (
+                    lines_set[10], samplename, sum_freq, Tag)
+                elif trunc_SNP == lines_set[3]:
+                    # minor allele == trunc_SNP
+                    pass
+                else:
+                    # other allele == trunc_SNP
+                    Minor_freq, other_freq, Major_freq = lines_set[4:7]
+                    Major_freq, Minor_freq, other_freq, Tag, sum_freq = compute_freq(Major_freq, Minor_freq, other_freq)
+                    newlines = '\t'.join(
+                        [lines_set[0], lines_set[1], 'other', lines_set[2]]) + '\t%s\t%s\t%s\t%s' % (
+                                   lines_set[10], samplename, sum_freq, Tag)
+                newlines = '%s\t%s' % (donor_species, newlines)
+                if tag == 'withinHS':
+                    output_trunc_within = output_sum_sub(newlines, output_trunc_within, Major_freq, Minor_freq,
+                                                         other_freq)
+                else:
+                    output_trunc_other = output_sum_sub(newlines, output_trunc_other, Major_freq, Minor_freq,
+                                                        other_freq)
 
+def load_trunc(trunc_file):
+    Trunc = dict()
+    if trunc_file!= 'None':
+        for lines in open(trunc_file,'r'):
+            lines_set = lines.split('\n')[0].split('\t')
+            donor_species,CHR,POS = lines_set[0:3]
+            donor_species_CHR_POS = '%s\t%s\t%s'%(donor_species,CHR,POS)
+            tag = lines_set[5]
+            trunc_SNP = lines_set[6]
+            Trunc.setdefault(donor_species_CHR_POS,[tag,trunc_SNP])
+    return Trunc
 
 ################################################### Main ########################################################
 allsum = glob.glob('%s/*/*.IN.*.snp.sum'%(output_dir))
+# load trunc file
+Trunc = load_trunc(args.trunc)
 # split sum into sum per lineage
 alllineage = dict()
 for sumfiles in allsum:
@@ -183,6 +230,8 @@ for sumfiles in allsum:
     alllineage.setdefault(lineage,set())
     alllineage[lineage].add(sumfiles)
 
+output_trunc_within = []
+output_trunc_other = []
 # process allele freq sum for each lineage
 for lineage in alllineage:
     output_list_other = []
@@ -191,7 +240,7 @@ for lineage in alllineage:
     output_list_acrossdonor = []
     allsumfiles = alllineage[lineage]
     for sumfiles in allsumfiles:
-        output_sum(sumfiles, output_list_within,output_list_across,output_list_other,output_list_acrossdonor)
+        output_sum(sumfiles, output_list_within,output_list_across,output_list_other,output_list_acrossdonor,output_trunc_within,output_trunc_other)
     if len(output_list_within) > 0:
         f1 = open(os.path.join(sumoutput_dir,'withinHS/%s.withinHS.snp.sum'%(lineage)),'w')
         f1.write('CHR\tPOS\tMajor_ALT\tMinor_ALT\tgenename\tsamplename\tSum_freq\tMax_ALT\tFixed\tFreq\tFreq_tag\t\n')
@@ -251,3 +300,14 @@ f1.write(''.join(alloutput))
 f1.close()
 
 os.system('mv %s/*/all*.sum %s/'%(sumoutput_dir,sumoutput_dir))
+
+if len(output_trunc_within) > 0:
+    f1 = open(os.path.join(sumoutput_dir, 'all.withinHS.trunc.snp.sum'), 'w')
+    f1.write('lineage\tCHR\tPOS\tMajor_ALT\tMinor_ALT\tgenename\tsamplename\tSum_freq\tMax_ALT\tFixed\tFreq\tFreq_tag\t\n')
+    f1.write(''.join(output_trunc_within))
+    f1.close()
+if len(output_trunc_other) > 0:
+    f1 = open(os.path.join(sumoutput_dir, 'all.other.trunc.snp.sum'), 'w')
+    f1.write('lineage\tCHR\tPOS\tMajor_ALT\tMinor_ALT\tgenename\tsamplename\tSum_freq\tMax_ALT\tFixed\tFreq\tFreq_tag\t\n')
+    f1.write(''.join(output_trunc_other))
+    f1.close()

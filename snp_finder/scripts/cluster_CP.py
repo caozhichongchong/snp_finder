@@ -55,18 +55,72 @@ pangenome_dir = args.o + '/pangenome'
 output_dir = args.o + '/clonal_population'
 
 core_gene_cutoff = 1000
-cluster_cutoff2 = 1.0 # cutoff for clustering 1SNP per 1kbp
-spetial_species = {'1_BA_IBD_1':0.6,
-                  '1_BA_IBD_2':0.6,
-                   '1_BL_IBD_1':0.5,
-                   '1_BL_IBD_2': 0.1,
-                   '1_BA_IBD_3':0.3,
-                   '2_BA_IBD_3':2.0,
-                   '2_BL_IBD_0': 0.8,
-                   '2_BL_IBD_3': 0.9,
-                   '3_BL_IBD_0': 0.5,
-                   '3_BL_IBD_1': 0.7,
-                   '3_PB_IBD_3':0.2}
+cluster_cutoff2 = 0 # cutoff for clustering 0 SNPs
+spetial_species = {
+    '1_BA_IBD_0':1000,
+    '1_BA_IBD_1':1000,
+    '1_BA_IBD_2':0,
+    '1_BA_IBD_3':400,
+    '1_BA_IBD_4':0,
+'1_BA_IBD_5':0,
+'1_BL_IBD_0':2,
+'1_BL_IBD_1':0,
+'1_BL_IBD_2':0,
+'1_BL_IBD_3':0,
+#'1_BL_IBD_4':0,
+'1_PB_IBD_0':0,
+#'1_PB_IBD_1':0,
+#'1_PB_IBD_3':100,
+#'AkMu': 100,
+#'AkSp': 110,
+    #'AlOn':0,
+    'BA':0,
+    #'BaFr':0,
+#'BaOv':0,
+#?'BaSa':100,
+#'BaSt':500,
+    #'BaTh':0,
+#?'BaVu':0,
+  #'BaXy':400,
+   # 'BiBi':400,
+    'BiPs':0,
+    'BL':0,
+    'BlWe':0,
+    #'CiAm':60,
+    #'ClBe':50,
+    #'ClIn':15,
+    'CoAe':100,
+    #'EnDu':500,
+    #'EnHi':15,
+    #'EnMu':25,
+    'EsCo_95':0,
+    #'FaPr':10000,
+    #'LaRu':40,
+    #'PaDi':0,
+    'PaEx':110,
+    'PaGo':20,
+    'PaMe':220,
+    #'PhFa':6,
+    #'PsSp':200,
+    'RuLa':100,
+    #'StPa':0,
+    'TuSa':50,
+    '2_BA_IBD_0':12,
+'2_BA_IBD_3':4000, # need check
+    '2_BA_IBD_4':60,
+'2_BL_IBD_0':1000,
+'2_BL_IBD_1':120,
+'2_BL_IBD_2':60,
+'2_BL_IBD_3':1000,
+    '2_PB_IBD_1':600,
+    '2_PB_IBD_4':5000,
+    '3_BL_IBD_0':2000,
+    '3_BL_IBD_1':3000,
+    '3_BL_IBD_2':200,
+    '3_PB_IBD_0':60,
+    '3_PB_IBD_2':200,
+    '3_PB_IBD_3':500
+}
 try:
     os.mkdir(output_dir)
 except IOError:
@@ -277,15 +331,16 @@ if args.clustering == 2:
         all_record = set()
         Cluster_output = []
         cluster_cutoff = spetial_species.get(species,cluster_cutoff2)
-        for lines in open(SNP_result_file,'r'):
+        print(species,cluster_cutoff)
+        for lines in open(SNP_result_file, 'r'):
             if not lines.startswith('Genome1'):
                 lines_set = lines.split('\n')[0].split('\t')
-                record_before, record_new, SNP, tree_distance_2record,SNP_curated, total_length = lines_set[0:6]
-                Cluster_SNP.setdefault(record_before,[])
+                record_before, record_new, SNP, tree_distance_2record, SNP_curated, total_length = lines_set[0:6]
+                Cluster_SNP.setdefault(record_before, [])
                 Cluster_SNP.setdefault(record_new, [])
                 all_record.add(record_before)
                 all_record.add(record_new)
-                if int(float(SNP_curated))/int(total_length)*1000 <= cluster_cutoff:
+                if int(float(SNP_curated)) <= cluster_cutoff:
                     Cluster_SNP[record_before].append(record_new)
                     Cluster_SNP[record_new].append(record_before)
         cluster = 0
@@ -312,6 +367,6 @@ if args.clustering == 2:
                 Cluster_output.append(
                     '%s\t%s\t%s\t%s\t\n' % (
                         species, record_name, record_cluster, Sub_cluster))
-        f1 = open(os.path.join(output_dir, '%s.genome.cluster.txt')%(species), 'w')
+        f1 = open(os.path.join(output_dir, '%s.genome.cluster.txt') % (species), 'w')
         f1.write('species\tgenome\tcluster\ttotal_cluster\t\n%s' % (''.join(Cluster_output)))
         f1.close()

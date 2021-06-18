@@ -77,7 +77,7 @@ def pangenome(input_dir,species,output_dir):
     except FileNotFoundError:
         cmds = '%s -p %s -o roary_%s -e -n --mafft -f %s/roary_%s -i %s -cd %s %s/*.gff\n' % (
             args.roary,args.t, species, output_dir, species, args.id, args.cd, input_dir)
-        cmds += 'py37\n%s -c %s/roary_%s/core_gene_alignment.aln > %s/roary_%s/core_gene_alignment.snp_sites.aln\n' %(
+        cmds += '%s -c %s/roary_%s/core_gene_alignment.aln > %s/roary_%s/core_gene_alignment.snp_sites.aln\n' %(
             args.snp, output_dir, species, output_dir, species)
     return cmds
 
@@ -88,7 +88,7 @@ for genome_folder in genome_dir:
     cmds = pangenome(genome_folder,species,output_dir)
     if cmds != '':
         f1 = open(os.path.join(input_script_pan, '%s.sh' % (species)), 'w')
-        f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
+        f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n%s' % (''.join(cmds)))
         f1.close()
 
 f1 = open(os.path.join(input_script, 'allpangenome.sh'), 'w')

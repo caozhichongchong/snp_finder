@@ -1,6 +1,6 @@
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
-# After round 4 filter results of WGS
+# Filter results of WGS
 import glob
 import os
 from Bio import SeqIO
@@ -42,7 +42,10 @@ optional.add_argument('-t',
                       metavar="1 or more", action='store', default=40, type=int)
 optional.add_argument('-rd',
                       help="Round of SNP calling and filtering",
-                      metavar="1-4", action='store', default=1, type=int)
+                      metavar="1-4", action='store', default=2, type=int)
+optional.add_argument('-addqual',
+                      help="add quality of SNP mapping",
+                       action='store', default='True', type=str)
 optional.add_argument('-job',
                       help="Optional: command to submit jobs",
                       metavar="nohup or customized",
@@ -62,7 +65,6 @@ Tree = True
 Cov_dis = 20
 Cov_dis_overall = 1000 # calculate coverage per 1000 bp
 input_script = args.s
-genome_root = os.path.join(args.i,'*')
 output_dir = args.o + '/vcf_round%s/bwa'%(Round)
 output_dir_merge = args.o +'/vcf_round%s/merge'%(Round)
 vcf_name = '.all*.raw.vcf'
@@ -461,10 +463,16 @@ def mplieup_fastq(all_subvcffiles):
                     allchrpos[CHR_POS][0] = '\t'.join(lines_set[0:8]) + '\tQual:GT:PL:ADF:ADR:AD'
         i = 1
         for onesnp_file in all_subvcffiles:
+            cmds = '#!/bin/bash\nsource ~/.bashrc\n'
             try:
                 f1 = open(onesnp_file + '.filter', 'r')
             except FileNotFoundError:
-                os.system('bcftools filter -T %s.CHRPOS %s > %s.filter'%(snp_file_old,onesnp_file,onesnp_file))
+                cmds += 'bcftools filter -T %s.CHRPOS %s > %s.filter\n'%(snp_file_old,onesnp_file,onesnp_file)
+            f1 = open(snp_file_old + '.sh','w')
+            f1.write('%s'%(cmds))
+            f1.close()
+            os.system('sh %s.sh'%(snp_file_old))
+            print('sh %s.sh'%(snp_file_old))
             for lines in open(onesnp_file + '.filter', 'r'):
                 if not lines.startswith("#"):
                     lines_set = lines.split('\n')[0].split('\t')
@@ -523,15 +531,18 @@ for vcf_file in all_vcf_file:
                     Sample_name.append(genomename.replace('.', ''))
                     SNP_alignment.setdefault(genomename, '')
                     samplenum += 1
-                    all_subvcffiles.append((glob.glob(donor_species_folder + '.%s%s.raw.vcf'%(genomename,fastq_name))+ \
-                                           glob.glob(donor_species_folder + '.%s.raw.vcf' % (genomename))
-                                            )[0])
+                    if args.addqual =='True':
+                        all_subvcffiles.append((glob.glob(donor_species_folder + '.%s%s.raw.vcf'%(genomename,fastq_name))+ \
+                                               glob.glob(donor_species_folder + '.%s.raw.vcf' % (genomename))
+                                                )[0])
             if lines.startswith('##reference=file:'):
                 database_file = lines.split('##reference=file:')[1].split('\n')[0]
                 break
         print('running %s' % (donor_species))
-        snp_file = vcf_file.replace('.raw.vcf', '.flt.snp.addqual.vcf')
-        mplieup_fastq(all_subvcffiles)
+        snp_file = vcf_file.replace('.raw.vcf', '.flt.snp.vcf')
+        if args.addqual =='True':
+            mplieup_fastq(all_subvcffiles)
+            snp_file = vcf_file.replace('.raw.vcf', '.flt.snp.addqual.vcf')
         if database_file.split('.')[-1] != '.fna':
             # not gene file
             try:
@@ -555,12 +566,13 @@ for vcf_file in all_vcf_file:
                                                         CHR_old, POS_old, reference_name)
         outputvcf(output_name)
         outputtree(output_name)
-        try:
-            f1 = open(vcf_file + '.%s.cov.txt' % (output_name), 'r')
-        except IOError:
-            pass
-            #outputcov(output_name, list(vcf_file_POS_candidate))
-        try:
-            f1 = open(vcf_file + '.%s.cov.MW.txt' % (output_name), 'r')
-        except IOError:
-            outputcovwindow(output_name)
+        if args.addqual =='True':
+            try:
+                f1 = open(vcf_file + '.%s.cov.txt' % (output_name), 'r')
+            except IOError:
+                pass
+                #outputcov(output_name, list(vcf_file_POS_candidate))
+            try:
+                f1 = open(vcf_file + '.%s.cov.MW.txt' % (output_name), 'r')
+            except IOError:
+                outputcovwindow(output_name)
