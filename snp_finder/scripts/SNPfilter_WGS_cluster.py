@@ -65,6 +65,7 @@ ref_filename = '.fasta'
 fastq_name = args.fq
 split_donor = False
 fasttree = True # run fasttree instead of parsi tree
+SNPs_subsample = True # subsample 1% SNPs
 ################################################### Set up ########################################################
 # set up steps
 SNP_cluster = dict()
@@ -81,7 +82,7 @@ Allels_order = ['A','T','G','C']
 
 end_cutoff = 60 # contig end no SNP calling
 min_average_coverage_to_include_sample = 2 #Filter out samples have lower than that number of coverage
-max_fraction_ambigious_samples = .01 #If more than % of the samples have ambiguous NT, discard the candidate location
+max_fraction_ambigious_samples = .99 #If more than % of the samples have ambiguous NT, discard the candidate location
 min_median_coverage_position = 3 #Remove candidate locations have lower than this coverage
 min_qual_for_call = 50 #Remove sample*candidate that has lower than this quality
 min_maf_for_call = .9 #Remove sample*candidate
@@ -450,11 +451,15 @@ def run_parsi(a_parsi_file):
         os.system('mv outtree %s' % (a_parsi_file + '.out.tree'))
 
 def run_fasttree(a_parsi_file):
-    os.system('FastTreeMP -nt %s.normal.fasta > %s.out.fasttree.tree '%(a_parsi_file,a_parsi_file))
+    if SNPs_subsample:
+        os.system('FastTreeMP -nt %s.normal.short.fasta > %s.out.fasttree.tree ' % (a_parsi_file, a_parsi_file))
+    else:
+        os.system('FastTreeMP -nt %s.normal.fasta > %s.out.fasttree.tree '%(a_parsi_file,a_parsi_file))
 
 def outputtree_parsi(output_file):
     SNP_alignment_output_parsi = []
     SNP_alignment_output = []
+    SNP_alignment_output_short = []
     seq_num = 0
     seq_len_max = 0
     for genomename in SNP_alignment:
@@ -467,6 +472,9 @@ def outputtree_parsi(output_file):
             SNP_alignment_output_parsi.append('S%s    %s\n' % (newgenomename, SNP_alignment[genomename]))
             seq_num += 1
             seq_len_max = max(seq_len_max,seq_len)
+            if SNPs_subsample and seq_len >= 50000:
+                temp_snp = SNP_alignment[genomename]
+                SNP_alignment_output_short.append('>%s\n%s\n' % (genomename, ''.join([temp_snp[i] for i in range(0,len(temp_snp),100)])))
     temp_line = ('   %s   %s\n' % (seq_num, seq_len_max))
     vcf_file_filtered = open(output_file, 'w')
     vcf_file_filtered.write(temp_line + ''.join(SNP_alignment_output_parsi))
@@ -477,6 +485,10 @@ def outputtree_parsi(output_file):
     vcf_file_filtered = open(output_file + '.sum.txt', 'w')
     vcf_file_filtered.write(''.join(alloutput))
     vcf_file_filtered.close()
+    if SNPs_subsample and seq_len_max >= 50000:
+        vcf_file_filtered = open(output_file + '.normal.short.fasta', 'w')
+        vcf_file_filtered.write(''.join(SNP_alignment_output_short))
+        vcf_file_filtered.close()
 
 def ALT_freq_sub(Allels_subcount):
     Allels_count = [Allels_subcount[0] + Allels_subcount[1],
@@ -533,38 +545,44 @@ def short_contig_end(CHR,POS):
         return True
 
 def SNP_filter(vcf_file,CHRPOS_set,Sample_name,output_name,Badsamplenum,Tree = False, Filter = True):
-    vcf_file_list = []
-    vcf_file_list_freq = []
-    vcf_file_list_vcf = []
-    vcf_file_POS = []
-    vcf_file_POS_candidate = set()
-    CHR_old = ''
-    POS_old = 0
-    SNP_alignment = dict()
-    SNP_alignment.setdefault(reference_name, '')
-    Total = len(Sample_name)
-    for genomename in Sample_name:
-        SNP_alignment.setdefault(genomename, '')
-    m = 0
-    for lines in open(vcf_file, 'r'):
-        if not lines.startswith("#"):
-            lines_set = lines.split('\n')[0].split('\t')
-            CHR = lines_set[0]
-            POS = int(lines_set[1])
-            if not short_contig_end(CHR, POS):
-                CHRPOS = '%s\t%s' % (CHR, POS)
-                if CHRPOS not in CHRPOS_set:
-                    Depth = int(lines_set[7].split('DP=')[1].split(';')[0])
-                    if Total > 0 and (Depth / Total >= min_median_coverage_position or not Filter):
-                        # Remove candidate locations have lower than this coverage
-                        m += 1
-                        if m % 1000 == 0:
-                            print('%s processed %s SNPs' % (datetime.now(), m))
-                        CHR_old, POS_old,vcf_file_list,vcf_file_list_freq,vcf_file_list_vcf,vcf_file_POS,vcf_file_POS_candidate,SNP_alignment = SNP_check_all_fq(lines_set,
-                                                            CHR_old, POS_old, reference_name, Total,
-                                                            Badsamplenum,vcf_file_list,vcf_file_list_freq,vcf_file_list_vcf,vcf_file_POS,vcf_file_POS_candidate,SNP_alignment, Filter)
-    outputvcf(output_name,vcf_file_list_freq,vcf_file_list,Sample_name,vcf_file_POS)
-    outputtree(output_name,vcf_file_list_vcf,SNP_alignment,Tree)
+    filesize = 0
+    try:
+        filesize = int(os.path.getsize(vcf_file + '.%s.snpfreq.txt' % (output_name)))
+    except FileNotFoundError:
+        pass
+    if filesize == 0:
+        vcf_file_list = []
+        vcf_file_list_freq = []
+        vcf_file_list_vcf = []
+        vcf_file_POS = []
+        vcf_file_POS_candidate = set()
+        CHR_old = ''
+        POS_old = 0
+        SNP_alignment = dict()
+        SNP_alignment.setdefault(reference_name, '')
+        Total = len(Sample_name)
+        for genomename in Sample_name:
+            SNP_alignment.setdefault(genomename, '')
+        m = 0
+        for lines in open(vcf_file, 'r'):
+            if not lines.startswith("#"):
+                lines_set = lines.split('\n')[0].split('\t')
+                CHR = lines_set[0]
+                POS = int(lines_set[1])
+                if not short_contig_end(CHR, POS):
+                    CHRPOS = '%s\t%s' % (CHR, POS)
+                    if CHRPOS not in CHRPOS_set:
+                        Depth = int(lines_set[7].split('DP=')[1].split(';')[0])
+                        if Total > 0 and (Depth / Total >= min_median_coverage_position or not Filter):
+                            # Remove candidate locations have lower than this coverage
+                            m += 1
+                            if m % 1000 == 0:
+                                print('%s processed %s SNPs' % (datetime.now(), m))
+                            CHR_old, POS_old,vcf_file_list,vcf_file_list_freq,vcf_file_list_vcf,vcf_file_POS,vcf_file_POS_candidate,SNP_alignment = SNP_check_all_fq(lines_set,
+                                                                CHR_old, POS_old, reference_name, Total,
+                                                                Badsamplenum,vcf_file_list,vcf_file_list_freq,vcf_file_list_vcf,vcf_file_POS,vcf_file_POS_candidate,SNP_alignment, Filter)
+        outputvcf(output_name,vcf_file_list_freq,vcf_file_list,Sample_name,vcf_file_POS)
+        outputtree(output_name,vcf_file_list_vcf,SNP_alignment,Tree)
     print('%s finished output %s' % (datetime.now(), donor_species))
 
 

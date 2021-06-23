@@ -8832,7 +8832,7 @@ print('python vcf_process.py -i %s -s %s -o %s'%(genome_root, input_script, outp
 vcf_folder = '/scratch/users/anniz44/genomes/donor_species/WGS/vcf_round2/merge'
 vcf_format = '.filtered.vcf'
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
-# use clusters!
+# use clusters! SNPfilter_WGS_all.py
 print('python SNPfilter_WGS.py -i %s -vcf %s -s %s'%(vcf_folder, vcf_format,input_script))
 
 # step 4 calculate dnds
@@ -9066,11 +9066,10 @@ f1.close()
 # vcf processing per cluster
 import glob
 import os
-input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/vcfpro_round2'
+input_script_vcf = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/vcfpro_round2'
 output_dir = '/scratch/users/anniz44/genomes/donor_species/'
 genome_root = '/scratch/users/anniz44/genomes/donor_species/selected_species/round*/'
 
-input_script_vcf = input_script
 os.system('rm -rf %s'%(input_script_vcf))
 vcf_name = '.all*raw.vcf'
 try:
@@ -9089,23 +9088,23 @@ for vcf_file in all_vcf_file:
             f1 = open(os.path.join(input_script_vcf, '%s.sh' % (donor_species)), 'w')
             f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n')
             f1.write('python %s/../vcf_process.py -i \"%s\" -s %s -o %s -cluster %s\n' % (
-            input_script, genome_root, input_script, output_dir, donor_species))
+                input_script_vcf, genome_root, input_script_vcf, output_dir, donor_species))
             f1.close()
     except FileNotFoundError:
         donor_species = os.path.split(vcf_file)[-1].split('.all')[0]
         f1 = open(os.path.join(input_script_vcf, '%s.sh'%(donor_species)), 'w')
         f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n')
-        f1.write('python %s/../vcf_process.py -i \"%s\" -s %s -o %s -cluster %s\n'%(input_script,genome_root, input_script, output_dir,donor_species))
+        f1.write('python %s/../vcf_process.py -i \"%s\" -s %s -o %s -cluster %s\n'%(input_script_vcf,genome_root, input_script_vcf, output_dir,donor_species))
         f1.close()
 
-f1 = open(os.path.join(input_script, '../allvcfprocessing.sh'), 'w')
+f1 = open(os.path.join(input_script_vcf, '../allvcfprocessing.sh'), 'w')
 f1.write('#!/bin/bash\nsource ~/.bashrc\n')
 for sub_scripts in glob.glob(os.path.join(input_script_vcf, '*.sh')):
     sub_scripts_name = os.path.split(sub_scripts)[-1]
     f1.write('jobmit %s %s\n' % (sub_scripts, os.path.split(sub_scripts)[-1]))
 
 f1.close()
-print('please run: sh %s/../allvcfprocessing.sh'%(input_script))
+print('please run: sh %s/../allvcfprocessing.sh'%(input_script_vcf))
 
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
@@ -9165,14 +9164,16 @@ print('please run: sh %s/allvcfremoverec.sh'%(input_script))
 
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
-# remove rec per cluster -> SNPfilter_WGS_cluster_all.py
+# remove rec per cluster -> SNPfilter_WGS_all.py
 import glob
 import os
 vcf_format = '.filtered.vcf'
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/'
-vcf_folder = '/scratch/users/anniz44/genomes/donor_species/vcf_round1/merge'
+vcf_folder = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge'
 
-input_script_vcf = os.path.join(input_script,'vcfremoverecIBD')
+input_script_vcf = os.path.join(input_script,'vcfremoverec')
+rec_cutoff = 5000
+contig_cutoff = 10000
 
 #rec_set = ['EsCo','PB','BL','BA','TuSa','BiPs','PaDi']
 rec_set = []
@@ -9184,7 +9185,7 @@ except IOError:
 
 all_vcf_file=glob.glob(os.path.join(vcf_folder,'*%s'%(vcf_format)))
 Donor_species = set()
-#contig_cutoff = 10000
+
 for vcf_file in all_vcf_file:
     donor_species = os.path.split(vcf_file)[-1].split('.all')[0]
     if donor_species not in Donor_species:
@@ -9196,14 +9197,10 @@ for vcf_file in all_vcf_file:
         except FileNotFoundError:
             pass
         if filesize == 0:
-            #if any(item in donor_species for item in rec_set):
-            #    rec_cutoff = 10000
-            #else:
-            #    rec_cutoff = 5000
             f1 = open(os.path.join(input_script_vcf, '%s.sh'%(donor_species)), 'w')
             f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\n')
-            #f1.write('python %s/SNPfilter_WGS.py -i %s -vcf %s -cluster %s -s %s -rec %s -contig %s\n'%(input_script,vcf_folder, vcf_format, donor_species,input_script,rec_cutoff,contig_cutoff))
-            f1.write('python %s/SNPfilter_WGS_cluster.py -i %s -vcf %s -cluster %s -s %s\n'%(input_script,vcf_folder, vcf_format, donor_species,input_script))
+            f1.write('python %s/SNPfilter_WGS.py -i %s -vcf %s -cluster %s -s %s -rec %s -contig %s\n'%(input_script,vcf_folder, vcf_format, donor_species,input_script,rec_cutoff,contig_cutoff))
+            #f1.write('python %s/SNPfilter_WGS_cluster.py -i %s -vcf %s -cluster %s -s %s\n'%(input_script,vcf_folder, vcf_format, donor_species,input_script))
             f1.close()
 
 f1 = open(os.path.join(input_script, 'allvcfremoverec.sh'), 'w')
@@ -9213,7 +9210,7 @@ for sub_scripts in glob.glob(os.path.join(input_script_vcf, '*.sh')):
     f1.write('jobmit %s %s\n' % (sub_scripts, os.path.split(sub_scripts)[-1]))
     #f1.write('sh %s\n' % (sub_scripts))
 
-#f1.write('#jobmit dnds.sh dnds.sh\n')
+f1.write('#jobmit dnds.sh dnds.sh\n')
 f1.close()
 print('please run: sh %s/allvcfremoverec.sh'%(input_script))
 

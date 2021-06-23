@@ -54,6 +54,7 @@ vcf_final_dir = args.i + '/vcf_round2/merge'
 bam_final_dir = args.i + '/vcf_round2/bwa'
 empty_case = ('-', 'N')
 max_empty = 0.9 # each strain should cover 10% of the genome sequences with SNPs
+SNPs_subsample = True # sabsample 0.1% SNPs
 empty_species_cutoff = {
 'BaOv': 0.4,
     'BL':0.3,
@@ -132,12 +133,27 @@ except IOError:
 
 def SNP_seq(seq1, seq2):
     SNP_total = 0
-    total_length = min(len(seq1),len(seq2))
-    for i in range(0, total_length):
-        if seq1[i] != seq2[i] and seq1[i] not in empty_case and seq2[i] not in empty_case:
-            # a SNP excluding empty/missing allele
-            SNP_total += 1
-    return SNP_total
+    total_length = 0
+    total_length_all = min(len(seq1),len(seq2))
+    if SNPs_subsample and total_length_all >= 50000:
+        #subsample 0.1%
+        for i in range(0, total_length_all,100):
+            if seq1[i] not in empty_case and seq2[i] not in empty_case:
+                # excluding empty/missing allele
+                total_length += 1
+                if seq1[i] != seq2[i]:
+                    # a SNP
+                    SNP_total += 1
+        return [SNP_total,total_length]
+    else:
+        for i in range(0, total_length_all):
+            if seq1[i] not in empty_case and seq2[i] not in empty_case:
+                # excluding empty/missing allele
+                total_length += 1
+                if seq1[i] != seq2[i]:
+                    # a SNP excluding empty/missing allele
+                    SNP_total += 1
+        return [SNP_total,total_length]
 
 def SNP_seq_slow(seq1, seq2):
     s = difflib.SequenceMatcher(None, seq1, seq2).get_matching_blocks()
@@ -242,16 +258,6 @@ if args.clustering == 1:
             f1 = open(SNP_result_file, 'r')
         except FileNotFoundError:
             print('start analyzing SNP distribution in %s' % (species))
-            # load total length of ref genome
-            for lines in open(glob.glob(snpfasta.split('.all.parsi.fasta.normal.fasta')[0] + '.all*.raw.vcf')[0], 'r'):
-                if lines.startswith('##reference=file:'):
-                    # set database
-                    database_file = lines.split('##reference=file:')[1].split('\n')[0]
-                    break
-            Total_length = 0
-            for record in SeqIO.parse(database_file, 'fasta'):
-                Total_length += len(str(record.seq))
-            # print('total length of genome %s is %s'%(database_file,Total_length))
             # load tree
             try:
                 tree = Phylo.read(glob.glob(vcf_dir + '/tree/%s.all.parsi.fasta.out.*tree' % (species))[0], "newick")
@@ -263,17 +269,17 @@ if args.clustering == 1:
             Seq_list = dict()
             SNP_pair = []
             Bad_sample = set()
-            SNP_length = []
-            SNP_pair.append('Genome1\tGenome2\tSNPs\ttree_distance\tSNPs_curated_bytree\tCore_gene_length\t\n')
+            #SNP_length = []
+            SNP_pair.append('Genome1\tGenome2\tSNPs\tCore_gene_length\n')
             for record in SeqIO.parse(snpfasta, 'fasta'):
                 record_name = str(record.id)
                 record_seq = str(record.seq)
                 total_length = len(record_seq)
                 count_empty = record_seq.count('-')
-                SNP_length.append('%s\t%s\t%s\t%s\n'%(record_name,
-                                                          (count_empty/total_length),
-                                      count_empty,
-                                      total_length))
+                # SNP_length.append('%s\t%s\t%s\t%s\n'%(record_name,
+                #                                          (count_empty/total_length),
+                #                      count_empty,
+                #                      total_length))
                 if count_empty < empty_species_cutoff.get(species, max_empty) * total_length:
                     # less than min_coverage% empty
                     if Ref == '':
@@ -284,12 +290,13 @@ if args.clustering == 1:
                     else:
                         # print('start analysis one seq', datetime.now())
                         for record_before in Seq_list:
-                            SNP_total = SNP_seq(Seq_list[record_before], record_seq)
-                            SNP_total_tree, tree_distance_2record = tree_distance(record_before, record_name, tree,
-                                                                                  SNP_tree_distance)
-                            SNP_pair.append('%s\t%s\t%s\t%s\t%s\t%s\t\n' % (
-                                record_before, record_name, SNP_total, tree_distance_2record, SNP_total_tree,
-                                Total_length))
+                            SNP_total, total_length = SNP_seq(Seq_list[record_before], record_seq)
+                            # SNP_total_tree, tree_distance_2record = tree_distance(record_before, record_name, tree,
+                            #                                                      SNP_tree_distance)
+                            SNP_pair.append('%s\t%s\t%s\t%s\n' % (
+                                record_before, record_name, SNP_total,
+                                total_length))
+                        print('finish %s' % (record_name))
                     Seq_list.setdefault(record_name, record_seq)
                 else:
                     Bad_sample.add(record_name)
@@ -302,14 +309,14 @@ if args.clustering == 1:
                     if record_name not in Bad_sample:
                         for record_before in Seq_list:
                             SNP_pair.append(
-                                '%s\t%s\t%s\t%s\t%s\t%s\t\n' % (record_before, record_name, 0, 0, 0, Total_length))
+                                '%s\t%s\t%s\t%s\n' % (record_before, record_name, 0, 0))
                         Seq_list.setdefault(record_name, '')
             f1 = open(SNP_result_file, 'w')
             f1.write(''.join(SNP_pair))
             f1.close()
-            f1 = open('all.genome.empty.length.txt', 'a')
-            f1.write(''.join(SNP_length))
-            f1.close()
+            #f1 = open('all.genome.empty.length.txt', 'a')
+            #f1.write(''.join(SNP_length))
+            #f1.close()
             print('finish', datetime.now())
 
 if args.clustering == 2:

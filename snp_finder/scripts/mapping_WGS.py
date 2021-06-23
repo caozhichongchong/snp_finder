@@ -323,6 +323,7 @@ def mapping_WGS(donor_species,donor_species_fastqall):
         cmds = ''
         # check assmebly size
         allgenomesize = []
+        species = donor_species.split('_')[0]
         for fastq_file in donor_species_fastqall:
             if '.all' + fastq_name not in fastq_file and '.all.spades' not in fastq_file:
                 original_folder, fastq_file_name = os.path.split(fastq_file)
@@ -331,12 +332,13 @@ def mapping_WGS(donor_species,donor_species_fastqall):
                 fastq_file2 = filename + fastq_name.replace('1', '2')
                 if fastq_file_name == 'filter_reads_1.fastq':
                     # IBD
-                    genome_file = glob.glob(
-                        os.path.join(args.i + '/*/', '%s%s' % (original_folder.split('/')[Folder_num], genome_name)))
-                    if 'PB' in original_folder:
-                        genome_file = glob.glob(os.path.join(args.i + '/*/', '%s%s' % (
-                            '%s_PB_%s' % (original_folder.split('/')[Folder_num].split('_')[0],
-                                          original_folder.split('/')[Folder_num].split('_')[1]), genome_name)))
+                    genome_file = glob.glob('/scratch/users/mit_alm/IBD_Evo/%s/Assembly_for_gene_flow/%s/contigs.fasta'%(species,
+                                     original_folder.split('/')[Folder_num])) #+\
+                                  #glob.glob(os.path.join(args.i + '/*/', '%s%s' % (original_folder.split('/')[Folder_num], genome_name)))
+                    #if 'PB' in original_folder:
+                    #    genome_file = glob.glob(os.path.join(args.i + '/*/', '%s%s' % (
+                    #        '%s_PB_%s' % (original_folder.split('/')[Folder_num].split('_')[0],
+                    #                      original_folder.split('/')[Folder_num].split('_')[1]), genome_name)))
                 else:
                     genome_file = glob.glob(
                         os.path.join(original_folder, fastq_file_name.split(fastq_name)[0] + genome_name)) + \
@@ -357,11 +359,14 @@ def mapping_WGS(donor_species,donor_species_fastqall):
                     else:
                         genome_file = os.path.join(original_folder, fastq_file_name.split(fastq_name)[0] + genome_name)
                     print('assemblying genome %s' % (genome_file))
-                    cmds = runspades_single(fastq_file, fastq_file2, genome_file)
-                    os.system(cmds)
-                    cmds = ''
-                genome_file = genome_file[0]
-                filesize = int(os.path.getsize(genome_file))
+                    #cmds = runspades_single(fastq_file, fastq_file2, genome_file)
+                    #os.system(cmds)
+                    #cmds = '' # NEED CHANGE SKIP SPADES
+                    #filesize = int(os.path.getsize(genome_file))
+                    filesize = 1
+                else:
+                    genome_file = genome_file[0]
+                    filesize = int(os.path.getsize(genome_file))
                 allgenomesize.append(filesize)
             else:
                 allgenomesize.append(0)
@@ -369,7 +374,6 @@ def mapping_WGS(donor_species,donor_species_fastqall):
         maxgenome = statistics.mean(allgenomesize) * genomesize_cutoff
         qualifygenome = [donor_species_fastqall[i] for i in range(0, len(allgenomesize)) if
                          allgenomesize[i] <= maxgenome and allgenomesize[i] > 0]
-        species = donor_species.split('_')[0]
         if species not in Ref_set:
             # co-assembly
             donor_species_folder_all = os.path.join(folder, donor_species + '_allspades%s' % (Round))
@@ -416,13 +420,21 @@ def mapping_WGS(donor_species,donor_species_fastqall):
                 filename = fastq_file.split(fastq_name)[0]
                 fastq_file2 = filename + fastq_name.replace('1', '2')
                 # map each WGS to pangenome
-                results = run_vcf_WGS(fastq_file, fastq_file2,
+                if fastq_file == ref_fastq:
+                    # set as reference genome
+                    results = run_vcf_WGS(fastq_file, fastq_file2,
                                       donor_species_genomename,
                                       os.path.join(output_dir + '/bwa',
-                                                   fastq_file_name))
-                allsam += [results[1]]
+                                                   fastq_file_name + '.ref'))
+                    outputvcf = os.path.join(output_dir + '/merge', '%s.%s' % (donor_species, fastq_file_name + '.ref'))
+                else:
+                    results = run_vcf_WGS(fastq_file, fastq_file2,
+                                          donor_species_genomename,
+                                          os.path.join(output_dir + '/bwa',
+                                                       fastq_file_name))
+                    outputvcf = os.path.join(output_dir + '/merge', '%s.%s' % (donor_species, fastq_file_name))
+                    allsam += [results[1]]
                 cmds += results[0]
-                outputvcf = os.path.join(output_dir + '/merge', '%s.%s' % (donor_species, fastq_file_name))
                 cmds += merge_sample(donor_species_genomename, outputvcf, [results[1]], True)
         print(allsam)
         cmds += merge_sample(donor_species_genomename, alloutputvcf, allsam, False)
@@ -478,6 +490,8 @@ if args.cl != 'None':
                     ref_fastq = Cluster[species]['cluster1'][0]
                 if ref_fastq not in donor_species_fastqall:
                     donor_species_fastqall.append(ref_fastq)
+                else:
+                    ref_fastq = ''
                 print('map genomes for %s' % (donor_species))
                 mapping_WGS(donor_species, donor_species_fastqall)
 else:
@@ -486,6 +500,7 @@ else:
         donor_species = os.path.split(folder)[-1]
         donor_species_fastqall = glob.glob(os.path.join(folder, 'fastq/*' + fastq_name)) + \
                                  glob.glob(os.path.join(folder, '*' + fastq_name))
+        ref_fastq = ''
         mapping_WGS(donor_species, donor_species_fastqall)
 
 # sum all codes

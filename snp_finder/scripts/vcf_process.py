@@ -541,8 +541,9 @@ for vcf_file in all_vcf_file:
         print('running %s' % (donor_species))
         snp_file = vcf_file.replace('.raw.vcf', '.flt.snp.vcf')
         if args.addqual =='True':
-            mplieup_fastq(all_subvcffiles)
             snp_file = vcf_file.replace('.raw.vcf', '.flt.snp.addqual.vcf')
+            ref_subvcffiles = glob.glob(donor_species_folder + '*.ref.raw.vcf')
+            mplieup_fastq(all_subvcffiles + ref_subvcffiles)
         if database_file.split('.')[-1] != '.fna':
             # not gene file
             try:
@@ -557,7 +558,6 @@ for vcf_file in all_vcf_file:
                 CHR = lines_set[0]
                 POS = int(lines_set[1])
                 CHR_POS = '%s__%s' % (CHR, POS)
-                Depth = int(lines_set[7].split('DP=')[1].split(';')[0])
                 if Total == 0:
                     Total = len(lines_set) - 9
                 if "INDEL" not in lines_set[7] \
