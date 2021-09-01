@@ -62,7 +62,7 @@ complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
 # Set up mutation rate
 mut_set = [5,10,50,100,1000,5000,10000,50000]
 indel_time = 100 # how many indels in a genome
-cause_SNP = True
+cause_SNP = False
 mapping_file = True
 
 try:
@@ -333,7 +333,7 @@ def modelSNPall(Input_seq, Input_id, Length,num_mut,database_name):
     return output_fasta
 
 def run_mapper(files,database,tempbamoutput):
-    cmds = 'time java -jar %s/mapper1.1.jar --reference %s --queries %s --out-vcf %s.vcf\n' % (args.s,database, files, tempbamoutput)
+    cmds = 'time java -jar %s/mapper1.2.jar --reference %s --queries %s --out-vcf %s.vcf\n' % (args.s,database, files, tempbamoutput)
     return cmds
 
 # load database

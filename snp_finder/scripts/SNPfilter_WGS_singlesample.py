@@ -125,12 +125,6 @@ def outputvcf(output_name,vcf_file_list_freq,vcf_file_list_vcf,Sample_name):
     vcf_file_filtered = open(vcf_file + '.%s.vcf' % (output_name), 'w')
     vcf_file_filtered.write(''.join(vcf_file_list_vcf))
     vcf_file_filtered.close()
-    #vcf_file_filtered = open(vcf_file + '.%s.snp.txt' % (output_name), 'w')
-    #vcf_file_filtered.write(''.join(vcf_file_list))
-    #vcf_file_filtered.close()
-    #vcf_file_filtered = open(vcf_file + '.%s.samplename.txt' % (output_name), 'w')
-    #vcf_file_filtered.write('\t'.join(Sample_name) + '\n')
-    #vcf_file_filtered.close()
 
 
 def SNP_seq(seq1, seq2, POS_info,POS_info_CHR,POS_info_CHR_LEN,POS_info_output,G1,G2):
@@ -407,12 +401,11 @@ def load_sample(vcf_file):
 
 def load_sample_mapper(vcf_file):
     Sample_name = []
-    for lines in open(os.path.join(args.smp,os.path.split(vcf_file)[-1])+'.sh.out', 'r'):
-        if lines.startswith('Reference path = '):
+    for lines in open(os.path.join(args.smp,os.path.split(vcf_file)[-1])+'.sh', 'r'):
+        if ' --reference ' in lines:
             # set database
-            database_file = lines.split('Reference path = ')[1].split('\n')[0]
-        if lines.startswith('Queries path = '):
-            Sample_name.append(os.path.split(lines.split('Queries path = ')[1].split('\n')[0])[-1])
+            database_file = lines.split(' --reference ')[1].split(' --queries')[0]
+            Sample_name.append(os.path.split(lines.split(' --queries ')[1].split(' --out-vcf')[0])[-1])
             break
     if database_file.split('.')[-1] != '.fna':
         # not gene file
