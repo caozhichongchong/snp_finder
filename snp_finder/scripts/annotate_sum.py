@@ -34,9 +34,10 @@ def best_hit(Blast_output,small = 0):
             else:
                 identity2.sort(reverse=True)
             top1 = identity2[0]
-            top2 = identity2[1]
-            Blast_output[gene_name]=[db_name[identity.index(top1)],
-                                     db_name[identity.index(top2)]]
+            #top2 = identity2[1]
+            Blast_output[gene_name]=[db_name[identity.index(top1)]#,
+                                     #db_name[identity.index(top2)]
+             ]
         else:
             Blast_output[gene_name]=db_name
     return Blast_output
@@ -75,25 +76,29 @@ def annotate_eggnog(blast_search):
     Blast_output = dict()
     DB_name = dict()
     DB_name_2 = dict()
-    for blast_search_file in blast_search:
-        for lines in open(blast_search_file, 'r'):
-            if not lines.startswith('#'):
-                db_name = ''
-                identity = 0
-                lines_set = lines.split('\n')[0].split(' ')
-                gene_name = lines_set[0]
-                for sub_line in lines_set[1:]:
-                    if sub_line !='' and sub_line !='-':
-                        if db_name == '':
-                            db_name = sub_line.split('.')[0]
-                        elif identity == 0:
-                            identity = float(sub_line)
-                            break
-                Blast_output.setdefault(gene_name, [[], []])
-                Blast_output[gene_name][0].append(db_name)
-                Blast_output[gene_name][1].append(identity)
-                DB_name.setdefault(db_name, ['', ''])
-                DB_name_2.setdefault(db_name, [])
+    try:
+        f1 = open(all_fasta + '.eggnog.all.txt','r')
+    except IOError:
+        os.system('cat %s > %s'%(' '.join(blast_search),all_fasta + '.eggnog.all.txt'))
+    blast_search_file = all_fasta + '.eggnog.all.txt'
+    for lines in open(blast_search_file, 'r'):
+        if not lines.startswith('#'):
+            db_name = ''
+            identity = 0
+            lines_set = lines.split('\n')[0].split(' ')
+            gene_name = lines_set[0]
+            for sub_line in lines_set[1:]:
+                if sub_line != '' and sub_line != '-':
+                    if db_name == '':
+                        db_name = sub_line.split('.')[0]
+                    elif identity == 0:
+                        identity = float(sub_line)
+                        break
+            Blast_output.setdefault(gene_name, [[], []])
+            Blast_output[gene_name][0].append(db_name)
+            Blast_output[gene_name][1].append(identity)
+            DB_name.setdefault(db_name, ['', ''])
+            DB_name_2.setdefault(db_name, [])
     for database in [database_eggnog]:
         for lines in open(database, 'r'):
             if not lines.startswith('#'):
@@ -374,21 +379,21 @@ def cluster_species(All_annotation):
         for cluster in clusters:
             Donorspecies_sum.append(
                 '%s\t%s\t%s\t%s\t\n' % (donorspecies, cluster, Clusters_sum[cluster][0], Clusters_sum[cluster][1]))
-    f1 = open(all_fasta + '.gene.sum', 'w')
-    f1.write(''.join(output_sum))
-    f1.close()
-    f1 = open(all_fasta + '.cluster.sum', 'w')
-    f1.write(''.join(output_cluster))
-    f1.close()
+    #f1 = open(all_fasta + '.gene.sum', 'w')
+    #f1.write(''.join(output_sum))
+    #f1.close()
+    #f1 = open(all_fasta + '.cluster.sum', 'w')
+    #f1.write(''.join(output_cluster))
+    #f1.close()
     f1 = open(all_fasta + '.species.sum', 'w')
     f1.write(''.join(Species_sum))
     f1.close()
-    f1 = open(all_fasta + '.donor.sum', 'w')
-    f1.write(''.join(Donor_sum))
-    f1.close()
-    f1 = open(all_fasta + '.donor.species.sum', 'w')
-    f1.write(''.join(Donorspecies_sum))
-    f1.close()
+    #f1 = open(all_fasta + '.donor.sum', 'w')
+    #f1.write(''.join(Donor_sum))
+    #f1.close()
+    #f1 = open(all_fasta + '.donor.species.sum', 'w')
+    #f1.write(''.join(Donorspecies_sum))
+    #f1.close()
     Output = []
     Output.append('#species1\tspecies2\tgenus1\tgenus2\tnum_cluster_shared\t\n')
     for new_species in Species_species_count:
@@ -399,9 +404,9 @@ def cluster_species(All_annotation):
             new_genus2 = new_species2.split('_')[0]
             Output.append(
                 '%s\t%s\t%s\t%s\t%s\t\n' % (new_species, new_species2, new_genus1,new_genus2, all_species.count(new_species2)))
-    f1 = open(all_fasta + '.speciesTospecies.sum', 'w')
-    f1.write(''.join(Output))
-    f1.close()
+    #f1 = open(all_fasta + '.speciesTospecies.sum', 'w')
+    #f1.write(''.join(Output))
+    #f1.close()
 
 def sum_annotation(Blast_output1,DB_name1,Blast_output2,DB_name2,Blast_output3,DB_name3,Blast_output4,DB_name4,Clusters_gene):
     All_annotation = dict()

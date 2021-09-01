@@ -5,7 +5,8 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/'
-all_genomes = '/scratch/users/anniz44/genomes/donor_species//vcf_round2/co-assembly/*/*.noHM.fasta'
+#all_genomes = '/scratch/users/anniz44/genomes/donor_species//vcf_round2/co-assembly/*/*.noHM.fasta'
+allreference_list = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/details/all.reference.list'
 
 def shortname(genome,dna = False):
     newoutput = []
@@ -48,8 +49,15 @@ def runprokka(genome):
                           genome + '.prokka.fasta')
     return cmds
 
+all_genomes = []
+for lines in open(allreference_list, 'r'):
+    if lines.startswith('##reference=file:'):
+        # set database
+        database_file = lines.split('##reference=file:')[1].split('\n')[0]
+        all_genomes.append(database_file)
+
 cmds = ''
-for genome in glob.glob(all_genomes):
+for genome in all_genomes:
     cmds += runprokka(genome)
 
 f1 = open(os.path.join(input_script, 'allprokka.sh'), 'w')

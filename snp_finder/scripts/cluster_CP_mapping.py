@@ -63,20 +63,20 @@ empty_species_cutoff = {
     'BA':0.4
 }
 core_gene_cutoff = 1000
-cluster_cutoff2 = 2 # cutoff for clustering 1 SNP/1kbp
+cluster_cutoff2 = 2 # cutoff for clustering 2 SNP/1kbp
 spetial_species = {
     'AlOn':10,
-    'BA':8,
+    'BA':3,
     'BaUn':0.5,
     'BaVu':3.0,
-    'BL':8,
+    'BL':3,
     'BlWe':5,
     'CoAe':10,
     'EgSp':5,
     'EsCo':5,
     'FaSp':15,
     'FiSp':30,
-    'PaDi':5,
+    'PaDi':3,
     'PaMe':1,
     'StSa':1,
     'TuSa':1.5
@@ -323,7 +323,7 @@ if args.clustering == 2:
     # save all reference genomes
     allref = []
     # clustering genomes based on SNP distance
-    all_results = glob.glob(os.path.join(output_dir, '*.SNP.pair.sum.txt'))
+    all_results = glob.glob(os.path.join(output_dir, 'PaDi.SNP.pair.sum.txt'))
     for SNP_result_file in all_results:
         changeanygenome = set()
         species = os.path.split(SNP_result_file)[-1].split('.SNP.pair.sum.txt')[0]

@@ -5,10 +5,11 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/'
-all_genomes = '/scratch/users/anniz44/genomes/donor_species//vcf_round2/co-assembly/*/*.noHM.fasta'
-all_prokka = '/scratch/users/anniz44/genomes/donor_species//vcf_round2/co-assembly/*/*.noHM.fasta.faa.prokka.txt'
-denovo_mut = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/summary/all.denovo.gene.faa'
-HS_mut = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/summary/all.selected.gene.faa'
+allreference_list = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/details/all.reference.list'
+#all_genomes = '/scratch/users/anniz44/genomes/donor_species//vcf_round2/co-assembly/*/*.noHM.fasta'
+#allprokka = '/scratch/users/anniz44/genomes/donor_species//vcf_round2/co-assembly/*/*.noHM.fasta.faa.prokka.txt'
+denovo_mut = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/details/summary/all.denovo.gene.faa'
+HS_mut = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/details/summary/all.selected.gene.faa'
 
 def load_gene(gene_file):
     gene_set = dict()
@@ -89,8 +90,18 @@ def load_prokka(prokka):
         if genename in allHS:
             allHS_out.append('%s\t%s\t%s'%(allHS[genename][0],allHS[genename][1],lines))
 
+# load genomes and prokka
+all_genomes = []
+allprokka = []
+for lines in open(allreference_list, 'r'):
+    if lines.startswith('##reference=file:'):
+        # set database
+        database_file = lines.split('##reference=file:')[1].split('\n')[0]
+        all_genomes.append(database_file)
+        allprokka.append(database_file + '.faa.prokka.txt')
+
 # sum prokka from reports
-for genome in glob.glob(all_genomes):
+for genome in all_genomes:
     if 'prokka_' not in genome:
         genomefolder, filename = os.path.split(genome)
         output_dir = '%s/prokka_%s' % (genomefolder, filename)
@@ -109,10 +120,11 @@ for genome in glob.glob(all_genomes):
 # sum all prokka and denovo mutations
 allmut = load_mut(denovo_mut)
 allHS = load_mut(HS_mut)
-allprokka = glob.glob(all_prokka)
 allmut_out = []
 allHS_out = []
 alloutput = set()
+
+# load prokka
 for prokka in allprokka:
     load_prokka(prokka)
 

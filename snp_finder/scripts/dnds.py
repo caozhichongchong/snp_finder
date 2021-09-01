@@ -32,9 +32,14 @@ optional.add_argument("-contig",
                       help="set a contig length cutoff to remove short contigs from dnds calculation (default 10000 bp)",
                       type=int, default=10000,
                       metavar='10000')
+optional.add_argument("-linktrunc",
+                      help="whether to filter out the SNPs that linked to a truncation on one gene (by trunc_link.py)",
+                      type=str, default='False',
+                      choices=['False','True'])
+
 ################################################## Definition ########################################################
 args = parser.parse_args()
-
+workingdir=os.path.abspath(os.path.dirname(__file__))
 # set up path
 Cluster = True
 Tree = True
@@ -44,6 +49,8 @@ Cov_dis = 20
 input_script = args.s
 output_dir_merge = args.o
 vcf_name = '.all.parsi.fasta.sum.txt'
+if args.linktrunc:
+    vcf_name = '.all.parsi.fasta.linktrunc.sum.txt'
 
 try:
     os.mkdir(output_dir_merge + '/summary')
@@ -72,7 +79,7 @@ total_SNP_position_cutoff = 2 # at least Xbp
 singleevent = True # curate historical events
 curate_empty = False # remove SNP type that is a subset of another SNP type
 countOther = True #do not count other SNPs (non-gene SNPs) when calculating expected NS ratio
-corecutoff = 0.9
+corecutoff = 3 # 3 genera
 Contig_cutoff = args.contig # compute dnds for contigs larger than Contig_cutoff
 sum_lineage = False # sum up dnds for each lineage if set true
 ################################################### new class #########################################################
@@ -472,7 +479,8 @@ def freq_call_sum(snp_file,Ref_seq, Ref_NSratio,SNP_gene_donorspecies,SNP_gene_s
                 Length.setdefault(Chr, Chr_long)
             Chr_long = Length.get(Chr)
             position = int(lines_set[1])
-            genome_SNP_set = lines_set[8]
+            genome_noSNP_set = lines_set[7].split(';')
+            genome_SNP_set = lines_set[8].split(';')
             N_or_S = lines_set[4]
             gene_info = contig_to_gene(Chr, position)
             if gene_info != []:
@@ -486,7 +494,12 @@ def freq_call_sum(snp_file,Ref_seq, Ref_NSratio,SNP_gene_donorspecies,SNP_gene_s
                 ALT_set.remove('')
             if len(ALT_set) > 0:
                 SNP_type.setdefault(Chr, set())
-                SNP_type[Chr].add(genome_SNP_set)
+                if len(genome_noSNP_set) > len(genome_SNP_set):
+                    genome_SNP_set.sort()
+                    SNP_type[Chr].add(';'.join(genome_SNP_set))
+                else:
+                    genome_noSNP_set.sort()
+                    SNP_type[Chr].add(';'.join(genome_noSNP_set))
                 New_gene = 0
                 if Chr not in all_SNP_gene_temp:
                     SNP_gene_temp = SNP_gene()
@@ -591,7 +604,8 @@ def freq_call_sum(snp_file,Ref_seq, Ref_NSratio,SNP_gene_donorspecies,SNP_gene_s
             # remove SNP type that is a subset of another SNP type
             #estimate_total_genome_set = curate_SNP_type(SNP_type[Chr]) # not including the major alt alt
             Chr_long = Length.get(Chr)
-            sumgene_line,High_select,High_select2 = sumgene(SNP_gene_temp,estimate_total_genome_set,donor_species,SNP_gene_donorspecies,Total,Chr_long,1)
+            sumgene_line,High_select,High_select2 = sumgene(SNP_gene_temp,estimate_total_genome_set,
+                                                            donor_species,SNP_gene_donorspecies,Total,Chr_long,1)
             Output2.append(sumgene_line)
             if Chr_long and High_select:  # with NS ratio cutoff
                 # use selected genes frequency * all genes NS ratio (codon NS sum of all genes)
@@ -657,7 +671,15 @@ if args.core != 'None':
         lines_set = lines.replace('\n', '').replace('\r', '').split('\t')
         geneID = lines_set[0]
         core = lines_set[-1]
-        Core.setdefault(geneID,core)
+        if core == '':
+            core = lines_set[-2]
+        if core in ['core','flexible','flexible_core','genus_num']:
+            Core.setdefault(geneID,core)
+        else:
+            if int(core) >= corecutoff:#num of genus
+                Core.setdefault(geneID, 'core')
+            else:
+                Core.setdefault(geneID, 'flexible')
 
 Donor_species = dict()
 if args.cutoff != 'None':
@@ -683,6 +705,10 @@ SNP_gene_all_core.init('allspecies_core')
 Output2 = []
 all_species = dict()
 all_vcf_file = glob.glob(os.path.join(output_dir_merge, '*%s' % (vcf_name)))
+if all_vcf_file == [] and args.linktrunc:
+    # filter out the SNPs that linked to a truncation on one gene
+    os.system('python %s/trunc_link.py -o %s'%(workingdir,output_dir_merge))
+    all_vcf_file = glob.glob(os.path.join(output_dir_merge, '*%s' % (vcf_name)))
 for vcf_file in all_vcf_file:
     print(vcf_file)
     raw_vcf = glob.glob(vcf_file.split('.donor')[0].split(vcf_name)[0]+'.all*.raw.vcf')
@@ -701,7 +727,7 @@ for vcf_file in all_vcf_file:
     species = donor_species.split('_')[0]
     if species == '1':
         species = donor_species.split('_')[1]
-    total_SNP_position_cutoff = Donor_species.get(species,2)
+    total_SNP_position_cutoff = Donor_species.get(donor_species,2)
     print('running %s cutoff %s' % (donor_species,total_SNP_position_cutoff))
     Ref_seq, Ref_NSratio, Mapping, Mapping_loci, Reverse = loaddatabase(database_file)
     SNP_gene_donorspecies = SNP_gene()  # all mutations of a clonal pop
@@ -766,7 +792,12 @@ if args.core != 'None':
     print('core', SNP_gene_all_core.dNdS)
 
 # output
-foutput = open(output_dir_merge + '/summary/all.species.txt', 'w')
+if args.cutoff == 'None':
+    foutput = open(output_dir_merge + '/summary/all.species.nocutoff.txt', 'w')
+elif 'sim' in args.cutoff:
+    foutput = open(output_dir_merge + '/summary/all.species.sim.txt', 'w')
+else:
+    foutput = open(output_dir_merge + '/summary/all.species.txt', 'w')
 foutput.write('#donor_species\tgene\tNo.genome\tgene_length\ttotal_SNP_genomeset\tNo.SNP\tNo.SNP_position\tN\tS\tOther\tobserved_ratio\texpected_ratio\tdNdS\t' +\
             'A-T_freq\tA-T_N:S\tA-C_freq\tA-C_N:S\tG-C_freq\tG-C_N:S\tG-T_freq\tG-T_N:S\tA-G_freq\tA-G_N:S\tG-A_freq\tG-A_N:S\tHigh_selected\n')
 foutput.write(''.join(Output2))

@@ -1,3 +1,17 @@
+cmds = 'python genome_sum.py -s . -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/bwa'
+cmds = 'python genome_curate.py -s . -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/test_data -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/bwa'
+cmds = 'python SNP_model.py -s /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/ -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/test_data -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/'
+cmds = 'sh allsnpmodel.sh'
+cmds = 'python SNPfilter_WGS_singlesample.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/merge -vcf .flt.snp.vcf -s . -smp /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/SNP_model/'
+cmds = 'python SNP_model_compare.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/merge/ -ref /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/data/'
+# indel only
+cmds = 'python SNP_model_indelonly.py -s /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/ -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/test_data -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/'
+cmds = 'sh allsnpmodel.sh'
+cmds = 'python SNPfilter_WGS_singlesample.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/indel_model/merge -vcf .flt.snp.vcf -s . -smp /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/indel_model/'
+#cmds = 'python SNP_model_compare.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/indel_model/merge/ -ref /scratch/users/anniz44/genomes/donor_species/SNP_curate/indel_model/data/'
+
+# crispr
+cmds = 'python spacer_parsimony.py'
 ################################################### END ########################################################
 # step 1 whole genomes fastq mapping to the assembly genome
 import glob
@@ -4790,193 +4804,4 @@ for vcf_file in all_vcf_file:
 
 ################################################## END ########################################################
 ################################################### SET PATH ########################################################
-# compare genome call SNPs VS WGS call SNPs
-# Question: why genome mapping shows SNPs that have no alternative alleles in raw.vcf of WGS mapping?
-import glob
-import os
-from Bio import SeqIO
-from Bio.Seq import Seq
-import statistics
-
-# set up path
-output_dir = '/scratch/users/anniz44/genomes/donor_species/selected_species/SNP_test/bwa/0/'
-ref_dir = '/scratch/users/anniz44/genomes/donor_species/selected_species/SNP_test/'
-# ref
-vcf_ref = glob.glob(ref_dir + '/*.SNP.fasta.snp.txt')
-# set up cutoff
-end_cutoff = 70 # 10 bp at the ends of a contig, separate
-
-# function
-def load_vcf_ref(vcf_file,end_count = False):
-    end_set = ['end', 'notend']
-    vcf_count = dict()
-    vcf_count.setdefault('end', 0)
-    vcf_count.setdefault('notend', 0)
-    vcf_input = []
-    vcf_ref = dict()
-    for lines in open(vcf_file):
-        if not lines.startswith('#'):
-            lines_set = lines.split('\n')[0].split('\t')
-            CHR = lines_set[0]
-            POS = lines_set[1]
-            CHRPOS = '%s\t%s\t\n'%(CHR,POS)
-            Gene = lines_set[4].replace('N','Gene').replace('S','Gene')
-            vcf_input.append(CHRPOS)
-            vcf_ref.setdefault(CHRPOS,Gene)
-            if end_count:
-                vcf_count[contig_end('%s\t%s\t\n'%(CHR,POS))] += 1
-    if end_count:
-        summary_file_output.append('%s\t%s\t%s\t0\t0\n'%(os.path.split(vcf_file)[-1],vcf_count['end'],
-                                                               vcf_count['notend']))
-        print(vcf_count)
-    return [vcf_input,vcf_ref]
-
-def load_vcf(vcf_file,end_count = False):
-    end_set = ['end', 'notend']
-    vcf_count = dict()
-    vcf_count.setdefault('end', 0)
-    vcf_count.setdefault('notend', 0)
-    vcf_input = []
-    for lines in open(vcf_file):
-        if not lines.startswith('#'):
-            lines_set = lines.split('\n')[0].split('\t')
-            CHR = lines_set[0]
-            POS = lines_set[1]
-            vcf_input.append('%s\t%s\t\n'%(CHR,POS))
-            if end_count:
-                vcf_count[contig_end('%s\t%s\t\n'%(CHR,POS))] += 1
-    if end_count:
-        summary_file_output.append('%s\t%s\t%s\t0\t0\n'%(os.path.split(vcf_file)[-1],vcf_count['end'],
-                                                               vcf_count['notend']))
-        print(vcf_count)
-    return vcf_input
-
-def contig_end(CHRPOS):
-    CHR, POS = CHRPOS.split('\t')[0:2]
-    try:
-        total_length = CHR.split('size')[1]
-    except IndexError:
-        total_length = CHR.split('length_')[1].split('_cov')[0]
-    total_length = int(total_length)
-    if int(POS) <= end_cutoff or int(POS) >= total_length - end_cutoff + 1:
-        return 'end'
-    else:
-        return 'notend'
-
-def compare_vcf(vcf_input1, vcf_input2, vcf_file1, vcf_file2, output_file):
-    end_set = ['end','notend']
-    vcf_1_diff = dict()
-    vcf_1_diff.setdefault('end',[])
-    vcf_1_diff.setdefault('notend', [])
-    vcf_1_diff.setdefault('Gene', 0)
-    vcf_1_diff.setdefault('Other', 0)
-    # CHRPOS in 1 not in 2
-    for CHRPOS in vcf_input1:
-        if CHRPOS not in vcf_input2:
-            contig_end_tag = contig_end(CHRPOS)
-            vcf_1_diff[contig_end_tag].append(CHRPOS)
-            if contig_end_tag == 'notend' and CHRPOS in ref_gene:
-                vcf_1_diff[ref_gene[CHRPOS]] += 1
-    for contig_end_tag in end_set:
-        if len(vcf_1_diff[contig_end_tag]) > 0:
-            print(len(vcf_1_diff[contig_end_tag]))
-            temp_output = os.path.join(output_dir, 'grep.temp.%s.txt' % (contig_end_tag))
-            print(temp_output)
-            f1 = open(temp_output, 'w')
-            f1.write(''.join(vcf_1_diff[contig_end_tag]))
-            f1.close()
-            os.system('grep -T -f %s %s %s --no-group-separator > %s' % (
-                temp_output,
-                vcf_file1,vcf_file2,
-                output_file + '.temp'))
-            os.system('sort -k3 -n %s | sort -k2 > %s' %
-                      (output_file + '.temp', output_file + '.' + contig_end_tag)
-                      )
-            os.system('rm -rf %s' % (output_file+ '.temp'))
-        else:
-            os.system('rm -rf %s'%(output_file + '.' + contig_end_tag))
-    return vcf_1_diff
-
-def intersection(lst1, lst2):
-    return list(set(lst1) & set(lst2))
-
-def compare_vcf_all(vcf_1,vcf_2 = ''):
-    vcf_input1 = load_vcf(vcf_1)
-    vcf_1_all = glob.glob(vcf_1.split('.flt.snp.vcf')[0] + '.raw.vcf')
-    if vcf_1_all != []:
-        vcf_1_all = vcf_1_all[0]
-    else:
-        vcf_1_all = vcf_1
-    if vcf_2 != '':
-        vcf_input1 = intersection(vcf_input1, load_vcf(vcf_2))
-        vcf_input1 = list(set(vcf_input1))
-        vcf_1 = vcf_1 + '.all'
-    FN_diff = compare_vcf(vcf_inputref, vcf_input1, vcf_ref_file, vcf_1_all, vcf_1 + '.FN') # vcf diff in ref not in 1, FN
-    FP_diff = compare_vcf(vcf_input1, vcf_inputref, vcf_1, vcf_ref_file, vcf_1 + '.FP') # vcf diff in 1 not in ref, FP
-    summary_file_output.append('%s\t%s\t%s\t%s\t%s\t%s\t%s\n'%(
-        os.path.split(vcf_1)[-1],
-        len(FN_diff['end']),len(FN_diff['notend']),
-        len(FP_diff['end']), len(FP_diff['notend']),
-                                 FN_diff['Gene'],FN_diff['Other']
-    ))
-
-# WGS
-summary_file = output_dir + '/model.sum.txt'
-summary_file_output = []
-summary_file_output.append('sample\tFN_end\tFN_notend\tFP_end\tFP_notend\tFN_notend_gene\tFN_notend_other\n')
-for vcf_ref_file in vcf_ref:
-    vcf_ref_file_name = os.path.split(vcf_ref_file)[-1].split('.snp.txt')[0]
-    try:
-        # load ref
-        vcf_inputref, ref_gene = load_vcf_ref(vcf_ref_file, True)
-        # WGS
-        vcf_1 = glob.glob(output_dir + vcf_ref_file_name + '.fq.flt.snp.vcf.filtered.vcf')[0]
-        compare_vcf_all(vcf_1)
-        # WGS unfiltered
-        vcf_1 = glob.glob(output_dir + vcf_ref_file_name + '.fq.flt.snp.vcf')[0]
-        compare_vcf_all(vcf_1)
-        # genome
-        vcf_2 = glob.glob(output_dir + vcf_ref_file_name + '.genome.flt.snp.vcf.filtered.vcf')[0]
-        compare_vcf_all(vcf_2)
-        compare_vcf_all(vcf_2,vcf_1)
-    except IndexError:
-        pass
-
-f1=open(summary_file,'w')
-f1.write(''.join(summary_file_output))
-f1.close()
-os.system('rm -rf %s'%(os.path.join(output_dir, 'grep.temp.*.txt')))
-
-################################################### CLEAN UP ########################################################
-os.system('rm -rf /scratch/users/anniz44/genomes/donor_species/selected_species/SNP_currate2')
-os.system('rm -rf /scratch/users/anniz44/genomes/donor_species/selected_species/SNP_test/data/*.aln')
-os.system('rm -rf /scratch/users/anniz44/genomes/donor_species/selected_species/SNP_test/data/*.sam')
-os.system('rm -rf /scratch/users/anniz44/genomes/donor_species/selected_species/SNP_test/data/*.bam*')
-
-# not used
-def compare_vcf_cov(vcf_input1, vcf_input2, vcf_file1, vcf_file2, output_file):
-    end_set = ['end', 'notend']
-    vcf_1_diff = dict()
-    vcf_1_diff.setdefault('end', [])
-    vcf_1_diff.setdefault('notend', [])
-    for CHRPOS in vcf_input1:
-        if CHRPOS not in vcf_input2:
-            contig_end_tag = contig_end(CHRPOS)
-            vcf_1_diff[contig_end_tag].append(CHRPOS)
-    for contig_end_tag in end_set:
-        if len(vcf_1_diff[contig_end_tag]) > 0:
-            temp_output = os.path.join(input_script, 'grep.temp.%s.txt' % (contig_end_tag))
-            f1 = open(temp_output, 'w')
-            f1.write(''.join(vcf_1_diff[contig_end_tag]))
-            f1.close()
-            os.system('grep -T -f %s %s %s --no-group-separator > %s' % (
-                temp_output,
-                vcf_file1.split('.flt.snp.vcf')[0] + '.raw.vcf',
-                vcf_file2.split('.flt.snp.vcf')[0] + '.raw.vcf',
-                output_file+ '.temp'))
-            os.system('sort -k3 -n %s | sort -k2 > %s'%
-                      (output_file+ '.temp',output_file + '.' + contig_end_tag)
-                      )
-            os.system('rm -rf %s'%(output_file+ '.temp'))
-#compare_vcf_cov(vcf_input1, vcf_input2, vcf_1,vcf_2,vcf_1 + '.only') # vcf diff in 1 not in 2
-#compare_vcf_cov(vcf_input2, vcf_input1, vcf_2,vcf_1,vcf_2 + '.only') # vcf diff in 2 not in 1
+# compare genome call SNPs VS WGS call SNPs -> SNP_model_compare.py

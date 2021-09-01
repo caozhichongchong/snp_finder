@@ -23,7 +23,7 @@ args = parser.parse_args()
 # homologous cutoff
 length_cutoff = 500 # 500 bp for homologous region
 identity_cutoff = 95 # 95% identity for homologous region
-CHR_length_cutoff = 2000 # minimum contig lengths for reference genome
+CHR_length_cutoff = 5000 # minimum contig lengths for reference genome
 
 def length_CHR(CHR):
     try:

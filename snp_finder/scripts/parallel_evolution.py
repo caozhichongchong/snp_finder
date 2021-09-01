@@ -35,7 +35,7 @@ optional.add_argument("-o",
                       metavar='snp_output/')
 optional.add_argument("-trunc",
                       help="extract truncated genes",
-                      type=str, default='False',
+                      type=str, default='True',
                       metavar='False or True')
 # optional search parameters
 optional.add_argument('-t',
@@ -82,7 +82,10 @@ input_summary = output_dir_merge + '/summary/all.species.txt'
 output_gene = output_dir_merge + '/summary/all.selected.gene.faa'
 output_gene_dna = output_dir_merge + '/summary/all.selected.gene.fna'
 compute_species = False # compute dnds for specie, lineage, genus
-
+annotate_customized = False
+cluster_cutoff = 0.9
+parallele_across_donor = True # across donor or across lineage
+include_across_donor_PE = False # not including PE across donors when computing dnds
 try:
     os.mkdir(input_script_sub)
 except IOError:
@@ -116,7 +119,7 @@ def sum_donor_species(input_summary,selected = 1):
 def sum_vcf(allvcf):
     Donor_species = dict()
     for vcf in allvcf:
-        donor_species = os.path.split(vcf)[-1].split('.raw.vcf.filtered.vcf.final.removerec.snp.txt')[0].replace('.all','')
+        donor_species = os.path.split(vcf)[-1].split('.raw.vcf.filtered.vcf.final.snp.txt')[0].replace('.all','')
         Donor_species.setdefault(donor_species, [])
         for lines in open(vcf,'r'):
             lines_set = lines.replace('\n','').split('\t')
@@ -147,18 +150,30 @@ def extract_donor_species(donor_species,input_fasta,gene_name_list,output_fasta)
         print('missing genes ' + ' '.join([gene_name for gene_name in gene_name_list if gene_name not in gene_name_extract]))
     return output_fasta
 
-def get_all_cluster(High_select2_3SNP,record,allrecord):
-    for record2 in High_select2_3SNP[record]:
+def get_all_cluster(High_select2_SNP,record,allrecord):
+    for record2 in High_select2_SNP[record]:
         if record2 not in allrecord:
             allrecord.add(record2)
-            get_all_cluster(High_select2_3SNP, record2, allrecord)
+            get_all_cluster(High_select2_SNP, record2, allrecord)
     return allrecord
+
+def get_all_donor(allrecord):
+    donorset = set()
+    for record in allrecord:
+        donorset.add(record.replace('new','').split('donor.')[1].split('__')[0])
+    return donorset
+
+def get_all_lineage(allrecord):
+    donorset = set()
+    for record in allrecord:
+        donorset.add(record.split('__')[0])
+    return donorset
 
 # clustering
 def cluster_uc(cluster_input):
     Clusters = dict()
     High_select2 = set()
-    High_select2_3SNP = dict()
+    High_select2_SNP = dict()
     High_select2_output = []
     for lines in open(cluster_input, 'r'):
         line_set = lines.split('\n')[0].split('\t')
@@ -169,32 +184,28 @@ def cluster_uc(cluster_input):
         if record_name2!= '*':
             donor_species = record_name.split('__')[0]
             species = donor_species.split('_')[0]
-            if species == '1':
-                species = donor_species.split('_')[1]
             donor_species2 = record_name2.split('__')[0]
             species2 = donor_species2.split('_')[0]
-            if species2 == '1':
-                species2 = donor_species2.split('_')[1]
             if species == species2:
-                if species not in Donor_species_cutoff:
-                    High_select2.add(record_name2)
-                    High_select2.add(record_name)
-                else:
-                    High_select2_3SNP.setdefault(record_name, set())
-                    High_select2_3SNP[record_name].add(record_name2)
-                    High_select2_3SNP.setdefault(record_name2, set())
-                    High_select2_3SNP[record_name2].add(record_name)
-    if High_select2_3SNP!= dict():
-        for record in High_select2_3SNP:
+                High_select2_SNP.setdefault(record_name, set())
+                High_select2_SNP[record_name].add(record_name2)
+                High_select2_SNP.setdefault(record_name2, set())
+                High_select2_SNP[record_name2].add(record_name)
+    if High_select2_SNP!= dict():
+        for record in High_select2_SNP:
             donor_species = record.split('__')[0]
             species = donor_species.split('_')[0]
-            if species == '1':
-                species = donor_species.split('_')[1]
             allrecord = set()
             allrecord.add(record)
-            allrecord = get_all_cluster(High_select2_3SNP,record,allrecord)
-            if len(allrecord) >= Donor_species_cutoff[species]:
+            allrecord = get_all_cluster(High_select2_SNP,record,allrecord)
+            if parallele_across_donor:
+                donorset = get_all_donor(allrecord)
+            else:
+                donorset = get_all_lineage(allrecord)
+            if len(donorset) >= Donor_species_cutoff.get(species,2):
+                # at least 2 or more lineages
                 High_select2.add(record)
+                print(record,Donor_species_cutoff.get(species,2),species,donorset)
     return [Clusters,High_select2_output,High_select2]
 
 # correct highly selected genes dNdS
@@ -366,15 +377,16 @@ def add_new_selection(input_summary,High_select2):
                         print(line_set)
                         newoutput.append('\t'.join(line_set[:-1]) + '\tFalse\n')
                         High_select2.remove(record_id)
-                    elif (line_set[10] == 'observe_N_only' or float(line_set[10]) > 0):
-                        newoutput.append('\t'.join(line_set[:-1]) + '\tTrue\n')
-                        allspecies_highselect = add_highselect(line_set, allspecies_highselect)
-                        try:
-                            Donor_species[line_set[0]] = add_highselect(line_set, Donor_species[line_set[0]])
-                            Genus[genus] = add_highselect(line_set, Genus[genus])
-                            Species[species] = add_highselect(line_set, Species[species])
-                        except KeyError:
-                            print('no big contig in ',line_set[0])
+                    elif (line_set[10] == 'observe_N_only' or float(line_set[10]) >= 0):
+                        newoutput.append('\t'.join(line_set[:-1]) + '\tTrueacross\n')
+                        if include_across_donor_PE:
+                            allspecies_highselect = add_highselect(line_set, allspecies_highselect)
+                            try:
+                                Donor_species[line_set[0]] = add_highselect(line_set, Donor_species[line_set[0]])
+                                Genus[genus] = add_highselect(line_set, Genus[genus])
+                                Species[species] = add_highselect(line_set, Species[species])
+                            except KeyError:
+                                print('no big contig in ',line_set[0])
                     else:
                         newoutput.append('\t'.join(line_set[:-1]) + '\tFalse\n')
                         High_select2.remove(record_id)
@@ -430,7 +442,7 @@ def sum_gene(input_summary,High_select2, selected = 1):
     for lines in open(input_summary,'r'):
         lines_set = lines.replace('\n','').split('\t')
         if not lines.startswith('#'):
-            if selected == 0 or lines_set[-1] == 'True':
+            if selected == 0 or lines_set[-1] == 'Trueacross':
                 # highly selected genes or all genes
                 gene_name = lines_set[1]
                 genelist.append(gene_name)
@@ -452,12 +464,11 @@ def sum_gene(input_summary,High_select2, selected = 1):
 
 def annotation(all_filter_gene_fasta_file,pre_cluster = ''):
     # run cluster
-    cutoff = 0.7
+    cutoff = cluster_cutoff
     cmd_cluster = ('%s -sort length -cluster_fast %s -id %s -centroids %s.cluster.aa -uc %s.uc -threads %s\n'
                    % (args.u, all_filter_gene_fasta_file, cutoff, all_filter_gene_fasta_file,
                       all_filter_gene_fasta_file, 40))
     os.system(cmd_cluster)
-    all_filter_gene_fasta_file2 = all_filter_gene_fasta_file2
     all_filter_gene_fasta_file = all_filter_gene_fasta_file + '.cluster.aa'
     if pre_cluster!= '':
         os.system('#%s -makeudb_usearch %s -output %s.udb' %
@@ -465,86 +476,87 @@ def annotation(all_filter_gene_fasta_file,pre_cluster = ''):
         os.system('%s -ublast %s -db %s.udb  -evalue 1e-2 -accel 0.5 -blast6out %s -threads 2'%
                   (args.u, all_filter_gene_fasta_file,pre_cluster, all_filter_gene_fasta_file + '.ref.out.txt'))
     # run prokka
-    cmdsprokka = 'py37\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n'+\
+    cmdsprokka = 'py37\n'+\
     '%s --kingdom Bacteria --force --outdir %s/prokka_%s  --protein %s --locustag Bacter %s/%s\n' % \
-                 (args.prokka,output_dir_merge + '/summary', os.path.split(all_filter_gene_fasta_file2)[-1],
-                  all_filter_gene_fasta_file2,
+                 (args.prokka,output_dir_merge + '/summary', os.path.split(all_filter_gene_fasta_file)[-1],
+                  all_filter_gene_fasta_file,
                   output_dir_merge + '/summary',
-                  os.path.split(all_filter_gene_fasta_file2)[-1].replace('.faa', '.fna'))
+                  os.path.split(all_filter_gene_fasta_file)[-1].replace('.faa', '.fna'))
     f1 = open(os.path.join(input_script_sub, 'prokka.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (cmdsprokka))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmdsprokka))
     f1.close()
     # run metacyc
     cutoff = 50
     cutoff2 = 80
     database = '/scratch/users/mit_alm/database/metacyc/protseq.fsa'
-    cmds = ('py37\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n'+\
+    cmds = ('py37\n'+\
             "%s blastp --query %s --db %s.dmnd --out %s.metacyc.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
             %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
     f1 = open(os.path.join(input_script_sub, 'metacyc.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     # run eggnog
     cutoff = 0.01
     database = '/scratch/users/mit_alm/database/eggnog/xaa.hmm'
     cmds = ('%s --tblout %s.eggnog.1.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub, 'eggnog.1.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     database = '/scratch/users/mit_alm/database/eggnog/xab.hmm'
     cmds = ('%s --tblout %s.eggnog.2.txt --cpu 40 -E %s %s %s\n') % (
         args.hmm,
         all_filter_gene_fasta_file, cutoff, database, all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub, 'eggnog.2.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
     f1.close()
     database = '/scratch/users/mit_alm/database/eggnog/xac.hmm'
     cmds = ('%s --tblout %s.eggnog.3.txt --cpu 40 -E %s %s %s\n') % (
         args.hmm,
         all_filter_gene_fasta_file, cutoff, database, all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub, 'eggnog.3.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
     f1.close()
     # run kegg
     cutoff = 0.01
     database = '/scratch/users/mit_alm/database/kegg/kofam/profiles/prokaryote/prokaryote.hmm'
     cmds = ('%s --tblout %s.kegg.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub, 'kegg.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
-    # run customed database
-    cutoff = 80
-    cutoff2 = 80
-    cmds = ''
-    database = '/scratch/users/anniz44/scripts/database/SARG.db.fasta'
-    cmds += ("%s blastp --query %s --db %s.dmnd --out %s.SARG.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
-            %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
-    cutoff = 50
-    cutoff2 = 50
-    database = '/scratch/users/anniz44/scripts/database/AHR.aa.db'
-    cmds += ("%s blastp --query %s --db %s.dmnd --out %s.AHR.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
-            %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
-    cutoff = 60
-    cutoff2 = 80
-    database = '/scratch/users/anniz44/scripts/database/Butyrate.pro.aa'
-    cmds += ("%s blastp --query %s --db %s.dmnd --out %s.buty.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
-            %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
-    cutoff = 50
-    cutoff2 = 80
-    database = '/scratch/users/anniz44/scripts/database/IntI1_database.fasta'
-    cmds += ("%s blastp --query %s --db %s.dmnd --out %s.int.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
-            %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
-    cutoff = 50
-    cutoff2 = 80
-    database = '/scratch/users/anniz44/scripts/database/SRB.AA'
-    cmds += ("%s blastp --query %s --db %s.dmnd --out %s.SRB.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
-            %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
-    cutoff = 0.01
-    database = '/scratch/users/anniz44/scripts/database/NR.hmm'
-    cmds += ('%s --tblout %s.NR.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
-    f1 = open(os.path.join(input_script_sub, 'customed.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
-    f1.close()
+    if annotate_customized:
+        # run customed database
+        cutoff = 80
+        cutoff2 = 80
+        cmds = ''
+        database = '/scratch/users/anniz44/scripts/database/SARG.db.fasta'
+        cmds += ("%s blastp --query %s --db %s.dmnd --out %s.SARG.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+                %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
+        cutoff = 50
+        cutoff2 = 50
+        database = '/scratch/users/anniz44/scripts/database/AHR.aa.db'
+        cmds += ("%s blastp --query %s --db %s.dmnd --out %s.AHR.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+                %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
+        cutoff = 60
+        cutoff2 = 80
+        database = '/scratch/users/anniz44/scripts/database/Butyrate.pro.aa'
+        cmds += ("%s blastp --query %s --db %s.dmnd --out %s.buty.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+                %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
+        cutoff = 50
+        cutoff2 = 80
+        database = '/scratch/users/anniz44/scripts/database/IntI1_database.fasta'
+        cmds += ("%s blastp --query %s --db %s.dmnd --out %s.int.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+                %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
+        cutoff = 50
+        cutoff2 = 80
+        database = '/scratch/users/anniz44/scripts/database/SRB.AA'
+        cmds += ("%s blastp --query %s --db %s.dmnd --out %s.SRB.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+                %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
+        cutoff = 0.01
+        database = '/scratch/users/anniz44/scripts/database/NR.hmm'
+        cmds += ('%s --tblout %s.NR.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
+        f1 = open(os.path.join(input_script_sub, 'customed.sh'), 'w')
+        f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
+        f1.close()
     # all scripts
     f1 = open(os.path.join(input_script, 'allannotate.sh'), 'w')
     f1.write('#!/bin/bash\nsource ~/.bashrc\n')
@@ -558,7 +570,6 @@ def annotation(all_filter_gene_fasta_file,pre_cluster = ''):
 
 def annotation_all(all_filter_gene_fasta_file,pre_cluster = ''):
     # run cluster
-    all_filter_gene_fasta_file2 = all_filter_gene_fasta_file2
     all_filter_gene_fasta_file = all_filter_gene_fasta_file + '.cluster.aa'
     if pre_cluster!= '':
         os.system('#%s -makeudb_usearch %s -output %s.udb' %
@@ -566,86 +577,87 @@ def annotation_all(all_filter_gene_fasta_file,pre_cluster = ''):
         os.system('%s -ublast %s -db %s.udb  -evalue 1e-2 -accel 0.5 -blast6out %s -threads 2'%
                   (args.u, all_filter_gene_fasta_file,pre_cluster, all_filter_gene_fasta_file + '.ref.out.txt'))
     # run prokka
-    cmdsprokka = 'py37\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n'+\
+    cmdsprokka = 'py37\n'+\
             '%s --kingdom Bacteria --force --outdir %s/prokka_%s  --protein %s --locustag Bacter %s/%s\n' % \
-                 (args.prokka,output_dir_merge + '/summary', os.path.split(all_filter_gene_fasta_file2)[-1],
-                  all_filter_gene_fasta_file2,
+                 (args.prokka,output_dir_merge + '/summary', os.path.split(all_filter_gene_fasta_file)[-1],
+                  all_filter_gene_fasta_file,
                   output_dir_merge + '/summary',
-                  os.path.split(all_filter_gene_fasta_file2)[-1].replace('.faa', '.fna'))
+                  os.path.split(all_filter_gene_fasta_file)[-1].replace('.faa', '.fna'))
     f1 = open(os.path.join(input_script_sub_all, 'prokka.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (cmdsprokka))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmdsprokka))
     f1.close()
     # run metacyc
     cutoff = 50
     cutoff2 = 80
     database = '/scratch/users/mit_alm/database/metacyc/protseq.fsa'
-    cmds = ('py37\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n'+\
+    cmds = ('py37\n'+\
             "%s blastp --query %s --db %s.dmnd --out %s.metacyc.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
             %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
     f1 = open(os.path.join(input_script_sub_all, 'metacyc.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     # run eggnog
     cutoff = 0.01
     database = '/scratch/users/mit_alm/database/eggnog/xaa.hmm'
     cmds = ('%s --tblout %s.eggnog.1.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub_all, 'eggnog.1.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     database = '/scratch/users/mit_alm/database/eggnog/xab.hmm'
     cmds = ('%s --tblout %s.eggnog.2.txt --cpu 40 -E %s %s %s\n') % (
         args.hmm,
         all_filter_gene_fasta_file, cutoff, database, all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub_all, 'eggnog.2.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
     f1.close()
     database = '/scratch/users/mit_alm/database/eggnog/xac.hmm'
     cmds = ('%s --tblout %s.eggnog.3.txt --cpu 40 -E %s %s %s\n') % (
         args.hmm,
         all_filter_gene_fasta_file, cutoff, database, all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub_all, 'eggnog.3.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
     f1.close()
     # run kegg
     cutoff = 0.01
     database = '/scratch/users/mit_alm/database/kegg/kofam/profiles/prokaryote/prokaryote.hmm'
     cmds = ('%s --tblout %s.kegg.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub_all, 'kegg.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     # run customed database
-    cutoff = 80
-    cutoff2 = 80
-    cmds = ''
-    database = '/scratch/users/anniz44/scripts/database/SARG.db.fasta'
-    cmds += ("%s blastp --query %s --db %s.dmnd --out %s.SARG.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
-            %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
-    cutoff = 50
-    cutoff2 = 50
-    database = '/scratch/users/anniz44/scripts/database/AHR.aa.db'
-    cmds += ("%s blastp --query %s --db %s.dmnd --out %s.AHR.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
-            %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
-    cutoff = 60
-    cutoff2 = 80
-    database = '/scratch/users/anniz44/scripts/database/Butyrate.pro.aa'
-    cmds += ("%s blastp --query %s --db %s.dmnd --out %s.buty.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
-            %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
-    cutoff = 50
-    cutoff2 = 80
-    database = '/scratch/users/anniz44/scripts/database/IntI1_database.fasta'
-    cmds += ("%s blastp --query %s --db %s.dmnd --out %s.int.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
-            %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
-    cutoff = 50
-    cutoff2 = 80
-    database = '/scratch/users/anniz44/scripts/database/SRB.AA'
-    cmds += ("%s blastp --query %s --db %s.dmnd --out %s.SRB.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
-            %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
-    cutoff = 0.01
-    database = '/scratch/users/anniz44/scripts/database/NR.hmm'
-    cmds += ('%s --tblout %s.NR.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
-    f1 = open(os.path.join(input_script_sub_all, 'customed.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
-    f1.close()
+    if annotate_customized:
+        cutoff = 80
+        cutoff2 = 80
+        cmds = ''
+        database = '/scratch/users/anniz44/scripts/database/SARG.db.fasta'
+        cmds += ("%s blastp --query %s --db %s.dmnd --out %s.SARG.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+                %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
+        cutoff = 50
+        cutoff2 = 50
+        database = '/scratch/users/anniz44/scripts/database/AHR.aa.db'
+        cmds += ("%s blastp --query %s --db %s.dmnd --out %s.AHR.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+                %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
+        cutoff = 60
+        cutoff2 = 80
+        database = '/scratch/users/anniz44/scripts/database/Butyrate.pro.aa'
+        cmds += ("%s blastp --query %s --db %s.dmnd --out %s.buty.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+                %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
+        cutoff = 50
+        cutoff2 = 80
+        database = '/scratch/users/anniz44/scripts/database/IntI1_database.fasta'
+        cmds += ("%s blastp --query %s --db %s.dmnd --out %s.int.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+                %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
+        cutoff = 50
+        cutoff2 = 80
+        database = '/scratch/users/anniz44/scripts/database/SRB.AA'
+        cmds += ("%s blastp --query %s --db %s.dmnd --out %s.SRB.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+                %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
+        cutoff = 0.01
+        database = '/scratch/users/anniz44/scripts/database/NR.hmm'
+        cmds += ('%s --tblout %s.NR.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
+        f1 = open(os.path.join(input_script_sub_all, 'customed.sh'), 'w')
+        f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
+        f1.close()
     # all scripts
     f1 = open(os.path.join(input_script, 'allannotate_all.sh'), 'w')
     f1.write('#!/bin/bash\nsource ~/.bashrc\n')
@@ -659,12 +671,11 @@ def annotation_all(all_filter_gene_fasta_file,pre_cluster = ''):
 
 def annotation_trunc(all_filter_gene_fasta_file,pre_cluster = ''):
     # run cluster
-    cutoff = 0.7
+    cutoff = cluster_cutoff
     cmd_cluster = ('%s -sort length -cluster_fast %s -id %s -centroids %s.cluster.aa -uc %s.uc -threads %s\n'
                    % (args.u, all_filter_gene_fasta_file, cutoff, all_filter_gene_fasta_file,
                       all_filter_gene_fasta_file, 40))
     os.system(cmd_cluster)
-    all_filter_gene_fasta_file2= all_filter_gene_fasta_file
     all_filter_gene_fasta_file = all_filter_gene_fasta_file + '.cluster.aa'
     if pre_cluster!= '':
         os.system('#%s -makeudb_usearch %s -output %s.udb' %
@@ -672,86 +683,87 @@ def annotation_trunc(all_filter_gene_fasta_file,pre_cluster = ''):
         os.system('%s -ublast %s -db %s.udb  -evalue 1e-2 -accel 0.5 -blast6out %s -threads 2'%
                   (args.u, all_filter_gene_fasta_file,pre_cluster, all_filter_gene_fasta_file + '.ref.out.txt'))
     # run prokka
-    cmdsprokka = 'py37\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n'+\
+    cmdsprokka = 'py37\n'+\
                  '%s --kingdom Bacteria --force --outdir %s/prokka_%s  --protein %s --locustag Bacter %s/%s\n' % \
-                 (args.prokka,output_dir_merge + '/summary', os.path.split(all_filter_gene_fasta_file2)[-1],
-                  all_filter_gene_fasta_file2,
+                 (args.prokka,output_dir_merge + '/summary', os.path.split(all_filter_gene_fasta_file)[-1],
+                  all_filter_gene_fasta_file,
                   output_dir_merge + '/summary',
-                  os.path.split(all_filter_gene_fasta_file2)[-1].replace('.faa', '.fna'))
+                  os.path.split(all_filter_gene_fasta_file)[-1].replace('.faa', '.fna'))
     f1 = open(os.path.join(input_script_sub_trunc, 'prokka.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (cmdsprokka))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmdsprokka))
     f1.close()
     # run metacyc
     cutoff = 50
     cutoff2 = 80
     database = '/scratch/users/mit_alm/database/metacyc/protseq.fsa'
-    cmds = ('py37\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n'+\
+    cmds = ('py37\n'+\
             "%s blastp --query %s --db %s.dmnd --out %s.metacyc.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
             %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
     f1 = open(os.path.join(input_script_sub_trunc, 'metacyc.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     # run eggnog
     cutoff = 0.01
     database = '/scratch/users/mit_alm/database/eggnog/xaa.hmm'
     cmds = ('%s --tblout %s.eggnog.1.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub_trunc, 'eggnog.1.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     database = '/scratch/users/mit_alm/database/eggnog/xab.hmm'
     cmds = ('%s --tblout %s.eggnog.2.txt --cpu 40 -E %s %s %s\n') % (
         args.hmm,
         all_filter_gene_fasta_file, cutoff, database, all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub_trunc, 'eggnog.2.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
     f1.close()
     database = '/scratch/users/mit_alm/database/eggnog/xac.hmm'
     cmds = ('%s --tblout %s.eggnog.3.txt --cpu 40 -E %s %s %s\n') % (
         args.hmm,
         all_filter_gene_fasta_file, cutoff, database, all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub_trunc, 'eggnog.3.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
     f1.close()
     # run kegg
     cutoff = 0.01
     database = '/scratch/users/mit_alm/database/kegg/kofam/profiles/prokaryote/prokaryote.hmm'
     cmds = ('%s --tblout %s.kegg.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub_trunc, 'kegg.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     # run customed database
-    cutoff = 80
-    cutoff2 = 80
-    cmds = ''
-    database = '/scratch/users/anniz44/scripts/database/SARG.db.fasta'
-    cmds += ("%s blastp --query %s --db %s.dmnd --out %s.SARG.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
-            %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
-    cutoff = 50
-    cutoff2 = 50
-    database = '/scratch/users/anniz44/scripts/database/AHR.aa.db'
-    cmds += ("%s blastp --query %s --db %s.dmnd --out %s.AHR.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
-            %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
-    cutoff = 60
-    cutoff2 = 80
-    database = '/scratch/users/anniz44/scripts/database/Butyrate.pro.aa'
-    cmds += ("%s blastp --query %s --db %s.dmnd --out %s.buty.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
-            %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
-    cutoff = 50
-    cutoff2 = 80
-    database = '/scratch/users/anniz44/scripts/database/IntI1_database.fasta'
-    cmds += ("%s blastp --query %s --db %s.dmnd --out %s.int.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
-            %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
-    cutoff = 50
-    cutoff2 = 80
-    database = '/scratch/users/anniz44/scripts/database/SRB.AA'
-    cmds += ("%s blastp --query %s --db %s.dmnd --out %s.SRB.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
-            %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
-    cutoff = 0.01
-    database = '/scratch/users/anniz44/scripts/database/NR.hmm'
-    cmds += ('%s --tblout %s.NR.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
-    f1 = open(os.path.join(input_script_sub_trunc, 'customed.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
-    f1.close()
+    if annotate_customized:
+        cutoff = 80
+        cutoff2 = 80
+        cmds = ''
+        database = '/scratch/users/anniz44/scripts/database/SARG.db.fasta'
+        cmds += ("%s blastp --query %s --db %s.dmnd --out %s.SARG.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+                %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
+        cutoff = 50
+        cutoff2 = 50
+        database = '/scratch/users/anniz44/scripts/database/AHR.aa.db'
+        cmds += ("%s blastp --query %s --db %s.dmnd --out %s.AHR.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+                %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
+        cutoff = 60
+        cutoff2 = 80
+        database = '/scratch/users/anniz44/scripts/database/Butyrate.pro.aa'
+        cmds += ("%s blastp --query %s --db %s.dmnd --out %s.buty.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+                %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
+        cutoff = 50
+        cutoff2 = 80
+        database = '/scratch/users/anniz44/scripts/database/IntI1_database.fasta'
+        cmds += ("%s blastp --query %s --db %s.dmnd --out %s.int.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+                %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
+        cutoff = 50
+        cutoff2 = 80
+        database = '/scratch/users/anniz44/scripts/database/SRB.AA'
+        cmds += ("%s blastp --query %s --db %s.dmnd --out %s.SRB.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
+                %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
+        cutoff = 0.01
+        database = '/scratch/users/anniz44/scripts/database/NR.hmm'
+        cmds += ('%s --tblout %s.NR.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
+        f1 = open(os.path.join(input_script_sub_trunc, 'customed.sh'), 'w')
+        f1.write('#!/bin/bash\nsource ~/.bashrc\n%s'%(cmds))
+        f1.close()
     # all scripts
     f1 = open(os.path.join(input_script, 'allannotate_trunc.sh'), 'w')
     f1.write('#!/bin/bash\nsource ~/.bashrc\n')
@@ -763,9 +775,25 @@ def annotation_trunc(all_filter_gene_fasta_file,pre_cluster = ''):
     f1.close()
     print('please run %s/%s'%(input_script,'allannotate_trunc.sh'))
 
+def find_database(donor_species):
+    try:
+        database = glob.glob('%s/%s/%s*%s' % (genome_root, donor_species.split('.donor')[0],
+                                            donor_species.split('.donor')[0], ref_filename))[0]
+    except IndexError:
+        try:
+            database = glob.glob('%s/%s/%s*%s' % (
+            genome_root.replace('vcf_round2', 'vcf_round1'), donor_species.split('_')[0],donor_species.split('_')[0], ref_filename))[0]
+        except IndexError:
+            database = glob.glob(
+                '/scratch/users/anniz44/genomes/donor_species/WGS_old/WGS/vcf_round1/co-assembly/%s/%s*%s' % (
+                donor_species.split('.donor')[0],donor_species.split('.donor')[0], ref_filename))[0]
+    return database
+
+
 ################################################## Definition ########################################################
 
 # extract highly selected sequences
+print('extract high selected genes')
 try:
     f1 = open(output_gene,'r')
 except IOError:
@@ -777,8 +805,7 @@ except IOError:
         gene_name_list = Donor_species[donor_species]
         if gene_name_list != []:
             print('processing %s' % donor_species)
-            database = glob.glob('%s/*/%s*%s' % (genome_root, donor_species.split('donor')[0].replace('_PaDi_','_PB_'), ref_filename))[0]
-            ref_dir, ref_name = os.path.split(database)
+            database = find_database(donor_species)
             input_fasta = database + '.faa'
             input_fasta_dna = database + '.fna'
             try:
@@ -807,6 +834,7 @@ except IOError:
     f1.close()
 
 # extract all sequences
+print('extract genes with mutations')
 output_gene = output_dir_merge + '/summary/all.denovo.gene.faa'
 output_gene_dna = output_dir_merge + '/summary/all.denovo.gene.fna'
 output_fasta = []
@@ -820,12 +848,9 @@ except IOError:
         gene_name_list = Donor_species[donor_species]
         if gene_name_list != []:
             print('processing %s' % donor_species)
-            database = glob.glob('%s/*/%s*%s' % (genome_root, donor_species.split('donor')[0].replace('_PaDi_','_PB_'), ref_filename))
-            database = database[0]
-            ref_dir, ref_name = os.path.split(database)
+            database = find_database(donor_species)
             input_fasta = database + '.faa'
             input_fasta_dna = database + '.fna'
-            print(donor_species, input_fasta, input_fasta_dna)
             try:
                 f1 = open(input_fasta, 'r')
             except FileNotFoundError:
@@ -851,7 +876,7 @@ except IOError:
     f1.write(''.join(output_fasta_dna))
     f1.close()
     # run cluster
-    cutoff = 0.7
+    cutoff = cluster_cutoff
     cmd_cluster = ('%s -sort length -cluster_fast %s -id %s -centroids %s.cluster.aa -uc %s.uc -threads %s\n'
                        % (args.u, output_gene, cutoff, output_gene,
                           output_gene, args.t))
@@ -859,6 +884,7 @@ except IOError:
 
 # extract all truncated genes
 if args.trunc!= 'False':
+    print('extract genes with truncations')
     output_gene = output_dir_merge + '/summary/all.trunc.gene.faa'
     output_gene_dna = output_dir_merge + '/summary/all.trunc.gene.fna'
     output_fasta = []
@@ -870,14 +896,13 @@ if args.trunc!= 'False':
         output_fasta = []
         output_fasta_dna = []
         change_name = set()
-        allvcf = glob.glob(output_dir_merge + '/*donor*.raw.vcf.filtered.vcf.final.removerec.snp.txt')
+        allvcf = glob.glob(output_dir_merge + '/*donor*.raw.vcf.filtered.vcf.final.snp.txt')
         Donor_species = sum_vcf(allvcf)
         for donor_species in Donor_species:
             gene_name_list = Donor_species[donor_species]
             if gene_name_list != []:
                 print('processing %s' % donor_species)
-                database = glob.glob('%s/*/%s*%s' % (genome_root, donor_species.split('donor')[0].replace('_PaDi_','_PB_'), ref_filename))[0]
-                ref_dir, ref_name = os.path.split(database)
+                database = find_database(donor_species)
                 input_fasta = database + '.faa'
                 input_fasta_dna = database + '.fna'
                 try:
@@ -920,9 +945,9 @@ Donor_species_cutoff = dict()
 if args.cutoff != 'None':
     for lines in open(args.cutoff):
         lines_set = lines.replace('\n', '').replace('\r', '').split('\t')
-        donor_species = lines_set[0]
+        species = lines_set[0].split('_')[0]
         cutoff = int(lines_set[1])
-        Donor_species_cutoff.setdefault(donor_species,cutoff)
+        Donor_species_cutoff.setdefault(species,cutoff)
 
 # clustering
 Clusters_gene, High_select2_output,High_select2 = cluster_uc(all_fasta + '.uc')
@@ -932,7 +957,8 @@ High_select2 = add_new_selection(input_summary,High_select2)
 
 # run clustering
 sum_gene(input_summary,High_select2,1)
-annotation(all_fasta_HS + '.High_select2.faa','')
+annotation(all_fasta_HS,'')
+#annotation(all_fasta_HS + '.High_select2.faa','')
 annotation_all(all_fasta,'')
 if args.trunc!= 'False':
     annotation_trunc(all_fasta_trunc,'')

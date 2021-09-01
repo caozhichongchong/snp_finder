@@ -258,7 +258,7 @@ def remove_homologous(genome):
     except FileNotFoundError:
         cmds = 'py37\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:$LD_LIBRARY_PATH\npython %s/remove_homologous.py -i %s\n'%(workingdir,genome)
         # then run library
-        cmds += args.mini + ' -d %s.mmi %s\n' % (genome_noHM, genome_noHM)
+        #cmds += args.mini + ' -d %s.mmi %s\n' % (genome_noHM, genome_noHM)
         cmds += 'rm -rf %s.fai\n' % (genome_noHM)
         cmds += 'source deactivate py37\n'
         cmds += os.path.join(os.path.split('args.bw')[0], 'bowtie2-build') + ' %s %s\n' % (
@@ -310,7 +310,7 @@ def runprokka(genome):
 def mapping_WGS(donor_species,donor_species_fastqall):
     filesize = 0
     try:
-        filesize = int(os.path.getsize(os.path.join(output_dir + '/merge/details/', donor_species + '.all.flt.snp.vcf')))
+        filesize = int(os.path.getsize(os.path.join(output_dir + '/merge/', donor_species + '.all.flt.snp.vcf')))
     except FileNotFoundError:
         pass
     if filesize == 0:
