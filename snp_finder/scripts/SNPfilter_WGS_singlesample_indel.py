@@ -81,7 +81,7 @@ Allels_order = ['A','T','G','C','-']
 end_cutoff = 60 # contig end no SNP calling -> not used
 min_qual_for_call = 50 #Remove sample*candidate that has lower than this quality
 min_maf_for_call = .9 #Remove sample*candidate
-min_cov = 3 #2 # at least 2 reads mapped to POS
+min_cov = 2 # at least 2 reads mapped to POS
 min_cov_for_call_per_strand_round = 3 #Remove sample*candidate
 CHR_length_cutoff = args.contig # minimum ref contig length
 pair_strand = False # min_cov_for_call_per_strand for each straind
@@ -238,24 +238,19 @@ def SNP_check_fq(lines_set,vcf_file_list,vcf_file_list_freq,vcf_file_list_vcf,vc
         Subdepth_reverse = [int(i) for i in Subdepth_all.split(':')[-2].split(',')]
         for num_allels in range(0, min(len(Subdepth), Total_alleles)):
             allels = allels_set[num_allels]
-            #Subdepth_alleles = float(Subdepth[num_allels])
+            Subdepth_alleles = float(Subdepth[num_allels])
             if allels in Allels:
-                forward = Subdepth_forward[num_allels]
-                reverse = Subdepth_reverse[num_allels]
-                if forward + reverse < min_cov:
-                    forward = 0
-                    reverse = 0
-                Allels_frq[Allels[allels]] += reverse + forward
-                Allels_frq_sub[Allels[allels] * 2 + 1] += forward
-                Allels_frq_sub[Allels[allels] * 2 + 2] += reverse
+                Allels_frq[Allels[allels]] += Subdepth_alleles
+                Allels_frq_sub[Allels[allels] * 2 + 1] += Subdepth_forward[num_allels]
+                Allels_frq_sub[Allels[allels] * 2 + 2] += Subdepth_reverse[num_allels]
             else:
                 pass
         # find major alt and calculate frequency
         if sum(Allels_frq) > 0:
             Major_ALT, Minor_ALT = ALT_freq(Allels_frq)
             MAF = Major_ALT[1] / total_sub_depth
-            if Major_ALT[0] not in [REF,'-']:
-                if (MAF == 1 and total_sub_depth >= min_cov) or (MAF >= min_maf_for_call and
+            if Major_ALT[0] != REF:
+                if (MAF == 1 and total_sub_depth > min_cov) or (MAF >= min_maf_for_call and
                                                                  total_sub_depth >= min_cov_for_call_per_strand * 2):
                     if not pair_strand or \
                             sum(Subdepth_forward) >= min_cov_for_call_per_strand and \
@@ -324,7 +319,7 @@ def SNP_check_mapper(lines_set,vcf_file_list,vcf_file_list_freq,vcf_file_list_vc
         if allels in Allels:
             forward = float(Subdepth[num_allels].split(',')[0])
             reverse = float(Subdepth[num_allels].split(',')[1])
-            if forward + reverse < min_cov:
+            if forward + reverse <= min_cov:
                 forward = 0
                 reverse = 0
             Allels_frq[Allels[allels]] += forward + reverse
@@ -337,12 +332,9 @@ def SNP_check_mapper(lines_set,vcf_file_list,vcf_file_list_freq,vcf_file_list_vc
     if sum(Allels_frq) > 0:
         Major_ALT, Minor_ALT = ALT_freq(Allels_frq)
         MAF = Major_ALT[1] / total_sub_depth
-        if Major_ALT[0] not in [REF, '-']:
-            if (MAF == 1 and total_sub_depth >= min_cov) or (MAF >= min_maf_for_call and
+        if Major_ALT[0] != REF:
+            if (MAF == 1 and total_sub_depth > min_cov) or (MAF >= min_maf_for_call and
                                                              total_sub_depth >= min_cov_for_call_per_strand * 2):
-                if not pair_strand or \
-                        sum(Subdepth_forward) >= min_cov_for_call_per_strand and \
-                        sum(Subdepth_reverse) >= min_cov_for_call_per_strand:
                     temp_snp_line_frq.append(';'.join(str(frq_sub) for frq_sub in Allels_frq_sub))
                     temp_snp_line_frq2.append(';'.join(str(frq_sub) for frq_sub in Allels_frq_sub[1:]))
                     # a potential SNP
@@ -467,7 +459,7 @@ def SNP_filter(vcf_file,Sample_name,output_name,min_cov_for_call_per_strand, bow
                                          vcf_file_list_freq, vcf_file_list_vcf, vcf_file_POS_candidate,
                                          min_cov_for_call_per_strand)
             else:  # mapper1
-                if lines_set[2] not in ['N','-'] and lines_set[3] not in ['','-']:
+                if lines_set[2] not in ['N'] and lines_set[3] not in ['']:
                     # potential SNP
                     Depth = float(lines_set[4])
                     if (Depth >= min_cov):
@@ -493,7 +485,7 @@ if bowtie_filter:
     print(allvcf_file)
     for vcf_file in allvcf_file:
         try:
-            f1 = open(vcf_file + '.%s.snpfreq2.txt' % (output_name), 'r')
+            f1 = open(vcf_file + '.%s.snpfreq.txt' % (output_name), 'r')
         except IOError:
             donor_species = os.path.split(vcf_file)[-1]
             print('%s start processing %s' % (datetime.now(), donor_species))

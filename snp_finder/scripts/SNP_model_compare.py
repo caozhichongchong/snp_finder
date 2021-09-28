@@ -134,11 +134,11 @@ for vcf_ref_file in vcf_ref:
         genomename = vcf_ref_file_name.split('.')[0]
         if genomename in SNP_uncorrected:
             vcf_inputref += SNP_uncorrected[genomename]
-        # WGS
+        # bowtie
         vcf_1 = glob.glob(output_dir + vcf_ref_file_name + '.bowtie.flt.snp.vcf.final.vcf')[0]
         #vcf_1_all = vcf_1.replace('.bowtie.flt.snp.vcf.final.vcf','.bowtie.raw.vcf')
         compare_vcf_bowtie(vcf_1)
-        # genome
+        # mapper
         vcf_2 = glob.glob(output_dir + vcf_ref_file_name + '.mapper1.vcf.final.vcf')[0]
         vcf_2_all = vcf_2.replace('.mapper1.vcf.final.vcf', '.mapper1.vcf')
         compare_vcf_all(vcf_2,vcf_2_all,vcf_1)

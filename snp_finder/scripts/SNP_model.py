@@ -64,7 +64,9 @@ mut_set = [5,10,50,100,1000,5000,10000,50000]
 indel_time = 100 # how many indels in a genome
 cause_SNP = False
 mapping_file = True
-
+indel_orf = [-10,-7,-4, 4, 7, 10]
+indel_nonorf = list(range(2,11))
+indel_nonorf.extend(list(range(-10,-1)))
 try:
     os.mkdir(output_dir)
 except IOError:
@@ -192,41 +194,61 @@ def loaddatabase(database_aa,database):
     return [Ref_seq,Length,Mapping_loci,Reverse,Input_seq,Input_id]
 
 def modelindel(seq,Chr,indel_set):
-    seq = list(seq)
     SNP_output = []
     indel_set.sort()
-    length_add = 0
+    record_indel = dict()
     for position in indel_set:
-        gene_info = contig_to_gene(Chr, position)
-        REF = seq[position]
-        temp_ALT = ['A', 'T', 'G', 'C']
-        if gene_info != []:
-            # a gene
-            # indel = +- 3*n
-            indel_size = random.choices([4, 7, 10], k=1)[0]
+        total_length = len(seq)
+        if position < total_length:
+            REF = seq[position]
+            gene_info = contig_to_gene(Chr, position)
+            temp_ALT = ['A', 'T', 'G', 'C']
+            if gene_info != []:
+                # a gene
+                # indel = + 3*n
+                indel_size = random.choices(indel_orf, k=1)[0]
+            else:
+                # not a gene
+                indel_size = random.choices(indel_nonorf, k=1)[0]
+            if indel_size > 0:# insertion on ref
+                ALT = random.choices(temp_ALT, k=indel_size)
+                seq = seq[:position] + ALT + seq[position+1:]
+                temp_line = [Chr, str(position + 1), REF, ''.join(ALT)]
+                record_indel.setdefault(position, [REF,''.join(ALT),indel_size])
+            else:# deletion on ref
+                REF_after = ''.join(seq[position:(position-indel_size)])
+                REF = ''.join(seq[(position+indel_size):position])
+                del seq[(position+indel_size):position]
+                temp_line = [Chr, str(position + 1), REF, '-'*(-indel_size)]
+                record_indel.setdefault(position, [REF_after, '-'*(-indel_size),indel_size])
+            SNP_output.append('\t'.join(temp_line) + '\n')
         else:
-            # not a gene
-            indel_size = random.choices(range(2,11), k=1)[0]
-        ALT = ''.join(random.choices(temp_ALT, k=indel_size))
-        seq[position] = ALT
-        temp_line = [Chr, str(position + length_add + 1), REF, ALT]
-        SNP_output.append('\t'.join(temp_line) + '\n')
-        length_add += indel_size
-    return [''.join(seq), SNP_output]
+            print('position %s out of the reference %s'%(position,total_length))
+    if False:
+        print(Chr)
+        for position in record_indel:
+            REF,ALT,indel_size = record_indel[position]
+            print(position,REF,ALT,indel_size)
+            if indel_size > 0:
+                print(seq[position:position + indel_size])
+            else:
+                print(seq[position + indel_size:position])
+    return [seq, SNP_output]
 
 def modelSNP(seq,Chr,num_mut_chr,num_indel_chr):
     total_length = len(seq)
     # indel modelling
     indel_output = []
+    seq = list(seq)
     if num_indel_chr > 0:
         candidate_position = [i for i in range(0, total_length) if seq[i] not in ['-','N']]
         indel_set = random.sample(candidate_position, k=num_indel_chr)
         seq, indel_output = modelindel(seq,Chr,indel_set)
+    total_length = len(seq)
     # SNP modelling
     candidate_position = [i for i in range(0, total_length) if seq[i] not in ['-', 'N']]
     num_mut_chr = min(num_mut_chr,len(candidate_position))
     position_set = random.sample(candidate_position, k=num_mut_chr)
-    seq = list(seq)
     SNP_output = []
     for position in position_set:
         gene_info = contig_to_gene(Chr, position)
@@ -313,8 +335,13 @@ def modelSNPall(Input_seq, Input_id, Length,num_mut,database_name):
             newseq, newoutput, newoutputindel = modelSNP(Input_seq[chr], chr,num_mut_chr,num_indel_chr)
             Output_SNP += newoutput
             Output_indel += newoutputindel
+        elif chr in unique_chr_set_indel:
+            # not mutated, add indels
+            num_indel_chr = chr_set_indel.count(chr)
+            newseq, newoutput, newoutputindel = modelSNP(Input_seq[chr], chr, 0, num_indel_chr)
+            Output_indel += newoutputindel
         else:
-            # not mutated
+            # not mutated, no indels
             newseq = Input_seq[chr]
         Output.append('>%s\n%s\n' % (chr,
                                      newseq))
@@ -332,8 +359,8 @@ def modelSNPall(Input_seq, Input_id, Length,num_mut,database_name):
     print('done %s mutations in %s'%(num_mut,database_name))
     return output_fasta
 
-def run_mapper(files,database,tempbamoutput):
-    cmds = 'time java -jar %s/mapper1.2.jar --reference %s --queries %s --out-vcf %s.vcf\n' % (args.s,database, files, tempbamoutput)
+def run_mapper(files,files2,database,tempbamoutput):
+    cmds = 'time java -Xms250g -Xmx250g -jar %s/mapper1.9.jar --num-threads 40 --reference %s --queries %s  --queries %s --out-vcf %s.vcf\n' % (args.s,database, files, files2, tempbamoutput)
     return cmds
 
 # load database
@@ -371,7 +398,14 @@ for database in allgenome:
                                                mutated_genome_filename + '.bowtie')
             cmds = results[0]
             cmds += merge_sample(mutated_genome, outputvcf, [results[1]])
-            f1 = open(os.path.join(input_script_sub, '%s.bowtie.vcf.sh' % (mutated_genome_filename)), 'w')
+            #f1 = open(os.path.join(input_script_sub, '%s.bowtie.vcf.sh' % (mutated_genome_filename)), 'w')
+            #f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
+            #f1.close()
+            # call SNPs by our mapper
+            # run bowtie and mapper on the same node
+            cmds += run_mapper(fastq_file, fastq_file2, mutated_genome, os.path.join(output_dir + '/merge',
+                                                                                    mutated_genome_filename + '.mapper1'))
+            f1 = open(os.path.join(input_script_sub, '%s.mapper1.vcf.sh' % (mutated_genome_filename)), 'w')
             f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
             f1.close()
             # call SNPs by time minimap2 -> not used
@@ -383,22 +417,14 @@ for database in allgenome:
                                      mutated_genome_filename + '.minimap')
             cmds = results[0]
             cmds += merge_sample(mutated_genome, outputvcf, [results[1]])
-            #f1 = open(os.path.join(input_script_sub, '%s.minimap.vcf.sh' % (mutated_genome_filename)), 'w')
-            #f1.write('#!/bin/bash\nsource ~/.bashrc\npy37\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:$LD_LIBRARY_PATH\n%s' % (''.join(cmds)))
-            #f1.close()
-            # call SNPs by our mapper
-            cmds = run_mapper(fastq_file,mutated_genome,os.path.join(output_dir + '/merge',
-                                               mutated_genome_filename + '.mapper1'))
-            f1 = open(os.path.join(input_script_sub, '%s.mapper1.vcf.sh' % (mutated_genome_filename)), 'w')
-            f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
-            f1.close()
+
 
         mut_time -= 1
 
 f1 = open(os.path.join(input_script, 'allsnpmodel.sh'), 'w')
 f1.write('#!/bin/bash\nsource ~/.bashrc\n')
 for sub_scripts in glob.glob(os.path.join(input_script_sub, '*.vcf.sh')):
-    f1.write('jobmit %s %s small1\n' % (sub_scripts,os.path.split(sub_scripts)[-1]))
+    f1.write('jobmit %s %s small\n' % (sub_scripts,os.path.split(sub_scripts)[-1]))
 f1.close()
 
 ################################################### END ########################################################

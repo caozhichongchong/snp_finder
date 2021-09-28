@@ -2560,4 +2560,7 @@ f1.close()
 ################################################### SET PATH ########################################################
 # BS gene annotation -> annotate_eggnog.py
 ################################################### END ########################################################
+# compare BS loss -> compareBS_loss.py
+# 2-3 BSs unique in each genome, no matter whether it's a mutant or wild type
+
 

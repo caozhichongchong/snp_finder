@@ -5,13 +5,11 @@ cmds = 'sh allsnpmodel.sh'
 cmds = 'python SNPfilter_WGS_singlesample.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/merge -vcf .flt.snp.vcf -s . -smp /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/SNP_model/'
 cmds = 'python SNP_model_compare.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/merge/ -ref /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/data/'
 # indel only
-cmds = 'python SNP_model_indelonly.py -s /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/ -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/test_data -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/'
+cmds = 'python SNP_model_indelonly.py -s /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/ -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/test_data/indel_test/ -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/'
 cmds = 'sh allsnpmodel.sh'
-cmds = 'python SNPfilter_WGS_singlesample.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/indel_model/merge -vcf .flt.snp.vcf -s . -smp /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/indel_model/'
+cmds = 'python SNPfilter_WGS_singlesample_indel.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/indel_model/merge -vcf .flt.snp.vcf -s . -smp /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/indel_model/'
 #cmds = 'python SNP_model_compare.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/indel_model/merge/ -ref /scratch/users/anniz44/genomes/donor_species/SNP_curate/indel_model/data/'
 
-# crispr
-cmds = 'python spacer_parsimony.py'
 ################################################### END ########################################################
 # step 1 whole genomes fastq mapping to the assembly genome
 import glob
