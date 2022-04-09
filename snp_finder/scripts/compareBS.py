@@ -586,7 +586,7 @@ for lines in open(input_bs_file,'r'):
             species = lines_set[4].split('_')[0]
             donor = lines_set[5]
             SNP = lines_set[3]
-            if SNP in ['T17A']:#'A23V','G12R',
+            if SNP in ['A23V']:#'A23V','G12R',
                 print(SNP)
                 output_file_BS = '%s/%s/%s_%s_%s' % (output_folder, BS_folder, species, donor, SNP)
                 print(output_file_BS)

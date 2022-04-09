@@ -1,16 +1,49 @@
-cmds = 'python genome_sum.py -s . -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/bwa'
-cmds = 'python genome_curate.py -s . -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/test_data -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/bwa'
-cmds = 'python SNP_model.py -s /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/ -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/test_data -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/'
+cmds = 'python genome_sum.py -s . -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/test_data/merge/'
+cmds = 'python genome_curate.py -s . -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/test_data -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/test_data/merge/'
+cmds = 'python SNP_model.py -s /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/ -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/test_data -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/'
 cmds = 'sh allsnpmodel.sh'
-cmds = 'python SNPfilter_WGS_singlesample.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/merge -vcf .flt.snp.vcf -s . -smp /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/SNP_model/'
-cmds = 'python SNP_model_compare.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/merge/ -ref /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/data/'
-# indel only
+cmds = 'python SNPfilter_WGS_singlesample.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model_indelold/merge -vcf .flt.snp.vcf -s . -smp /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/SNP_model_indelold/SNP_model_10G/ -cluster am_BaSa_g0015.fasta'
+cmds = 'python SNP_model_compare.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model/merge/ -ref /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model/data/'
+cmds = 'python Indelfilter.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model/merge/ -ref /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model_indelold/data/'
+
+# summarize bowtie and mapper time and reads alignment rate -> timecovsum.py
+cmds = 'python timecovsum.py'
+# human diet
+cmds = 'python SNPfilter_coverage_humandiet.py -i /scratch/users/anniz44/genomes/donor_species/vcf_round2/human_diet/ -s /scratch/users/anniz44/scripts/1MG/donor_species/assembly/human_diet/'
+# human genome
+cmds = 'python genome_sum.py -s . -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/human/merge'
+cmds = 'python genome_curate.py -s . -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/human -fa .fa -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/human/merge'
+cmds = 'python SNP_model.py -s /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/ -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/human -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/human/ -indel False'
+cmds = 'sh allsnpmodel.sh'
+cmds = 'python SNPfilter_WGS_singlesample_human.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/human/SNP_model/merge/ -vcf .flt.snp.vcf -s . -smp /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/SNP_model/'
+cmds = 'python SNP_model_compare.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/human/SNP_model/merge/ -ref /scratch/users/anniz44/genomes/donor_species/SNP_curate/human/SNP_model/data/'
+# human genome no indel
+cmds = 'python SNP_model.py -noindel True -s /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/ -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/human -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/human/'
+cmds = 'sh allsnpmodel.sh'
+cmds = 'python SNPfilter_WGS_singlesample_human.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/human/SNP_model_noindel/merge/ -vcf .flt.snp.vcf -s . -smp /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/SNP_model_noindel/'
+cmds = 'python SNP_model_compare.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/human/SNP_model_noindel/merge/ -ref /scratch/users/anniz44/genomes/donor_species/SNP_curate/human/SNP_model_noindel/data/'
+# compare read by read bowtie to mapper
+cmds = 'python SNP_compare_mappertobowtie.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/human/SNP_model_noindel/merge/selected2.fa'
+cmds = 'python SNP_compare_mappertobowtiesum.py'
+
+cmds = 'python SNP_compare_mappertobowtie.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model/SNP_compare/am_BaSa_g0015.fasta -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model/SNP_compare -r /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model/data/am_BaSa_g0015.fasta.0.SNP.fasta'
+cmds = 'python SNP_compare_mappertobowtie.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model/SNP_compare/am_BaFr_g0050.fasta -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model/SNP_compare -r /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model/data/am_BaFr_g0050.fasta.0.SNP.fasta'
+cmds = 'python SNP_compare_mappertobowtiesum.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model/SNP_compare/SNP_compare_output/'
+
+# community test, test synthetic community of xiaoqian
+cmds = 'python community_test.py'
+cmds = 'python SNPfilter_coverage.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/xq_data/merge/ -s /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/xq_data/'
+cmds = 'python community_sum.py'## summarize synthetic community of xiaoqian
+################################################### END ########################################################
+################################################### START ########################################################
+
+# indel only not used
 cmds = 'python SNP_model_indelonly.py -s /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/ -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/test_data/indel_test/ -o /scratch/users/anniz44/genomes/donor_species/SNP_curate/'
 cmds = 'sh allsnpmodel.sh'
 cmds = 'python SNPfilter_WGS_singlesample_indel.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/indel_model/merge -vcf .flt.snp.vcf -s . -smp /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/indel_model/'
 #cmds = 'python SNP_model_compare.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/indel_model/merge/ -ref /scratch/users/anniz44/genomes/donor_species/SNP_curate/indel_model/data/'
-
 ################################################### END ########################################################
+################################################### START ########################################################
 # step 1 whole genomes fastq mapping to the assembly genome
 import glob
 import os

@@ -76,15 +76,16 @@ co_assembly_dir = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/co-as
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
 output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/'
 cutoff_file = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/total_SNP_cutoff_lineage.txt'
-
-print('python parallel_evolution.py -i %s -s %s -o %s -cutoff %s'%(co_assembly_dir,input_script, output_dir_merge,cutoff_file))
+# to run hmmsearch, c3ddb -> logdefq -> checkjob -> ssh nodeXXX
+print('python parallel_evolution.py -i %s -s %s -o %s -cutoff %s -sig /scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/details/patients/summary/all.species.lineage.dmrca.txt'%(co_assembly_dir,input_script, output_dir_merge,cutoff_file))
+print('python parallel_evolution_across_lineage.py -i %s -s %s -o %s -cutoff %s'%(co_assembly_dir,input_script, output_dir_merge,cutoff_file))
 print('please run %s/%s'%(input_script,'allannotate.sh'))
 print('please run %s/%s'%(input_script,'allannotate_all.sh'))
 
 # step 6 dmrca
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
 output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/'
-print('python dnds.py -s %s -o %s'%(input_script, output_dir_merge))
+print('python dmrca.py -s %s -o %s'%(input_script, output_dir_merge))
 
 # sum annotation + runprokka.py + sumprokka.py + snpsum.py
 output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/'
@@ -121,6 +122,10 @@ print('python mapping_meta.py -i %s -m %s -mfq .fasta -o %s -s %s -snp %s'%(asse
 print('sh %s/allMGvcf.sh'%(input_script))
 
 print('python SNPsum_meta.py -o %s'%(output_dir))
+
+# HTH copy number in Bifido
+print('python /scratch/users/anniz44/genomes/HTH/lacI_search.py')
+print('python /scratch/users/anniz44/genomes/HTH/lacI_sum.py')
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
 # PE general how significant
@@ -2562,5 +2567,5 @@ f1.close()
 ################################################### END ########################################################
 # compare BS loss -> compareBS_loss.py
 # 2-3 BSs unique in each genome, no matter whether it's a mutant or wild type
-
+# find strains with target snps find_strains_snps.py
 

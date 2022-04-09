@@ -10,6 +10,7 @@ import statistics
 import argparse
 import random
 import numpy as np
+
 ############################################ Arguments and declarations ##############################################
 parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
 required = parser.add_argument_group('required arguments')
@@ -33,7 +34,7 @@ workingdir=os.path.abspath(os.path.dirname(__file__))
 summary_file = os.path.join('%s/all.species.lineage.dmrca.txt'%(args.snp))
 clonal_file = os.path.join('%s/clonal_genelength.txt'%(args.snp))
 # set up parameters
-simulation_round = 101
+simulation_round = 100001
 Min_SNP_highselect_cutoff = 1/3000
 
 ################################################### Function ########################################################
@@ -116,20 +117,21 @@ def mutation_sim():
             gene_mut_sum.setdefault(No_mut,0)
             gene_mut_sum[No_mut]+=1
         for No_mut in gene_mut_sum:
-            allsum_details.append('%s\t%s\t%s\t%s\n'%(lineage,i,No_mut,gene_mut_sum[No_mut]))
             if No_mut >= PE_cutoff:
                 PE_num += gene_mut_sum[No_mut]*No_mut # total number of PE SNPs
         allsum_dict.append(PE_num)
+        allsum_details.append('%s\t%s\t%s\n' % (lineage, i, PE_num))
     # sum up all simulations
     realPE = NO_PE_SNP
-    simPE = allsum_dict
-    simPE.append(realPE)
-    simPE.sort()
-    pvalue = 1 - (simPE.index(realPE) + 1) / (simulation_round + 1)
+    mean_value = statistics.mean(allsum_dict)
+    allsum_dict.sort()
+    #simPE = allsum_dict
+    #simPE.append(realPE)
+    #simPE.sort()
+    #pvalue = 1 - (simPE.index(realPE) + 1) / (simulation_round + 1)
     allsum.append('%s\t%s\t%s\t%s\t%s\t%s\n' % (lineage,PE_cutoff,
-                                            int(np.percentile(allsum_dict, 5)),
-                                            int(np.percentile(allsum_dict, 50)), int(np.percentile(allsum_dict, 95)),pvalue))
-
+                                            np.percentile(allsum_dict, 5),
+                                            np.percentile(allsum_dict, 50), np.percentile(allsum_dict, 95),mean_value))
 ################################################### Main ########################################################
 # load cutoff
 Donor_species = dict()
@@ -150,17 +152,17 @@ clonal = load_clonal(clonal_file)
 coassembly_list_set = load_coassembly_list(args.co)
 # simulation
 allsum = []
-allsum.append('lineage\tPE_SNP_cutoff\tlow\tmedium\thigh\n')
+allsum.append('lineage\tPE_SNP_cutoff\tlow\tmedium\thigh\tMean\n')
 allsum_details = []
-allsum_details.append('lineage\tsim_round\tNo_SNPs_per_gene\tNo_genes\tpvalue\n')
+allsum_details.append('lineage\tsim_round\tPE_expected\n')
 for lineage in lineage_SNP:
     lineage_short = lineage.split('.donor')[0]
     print(lineage_short)
-    nonORFlength,ORFlength = find_clonal(lineage_short)
-    PE_cutoff = Donor_species.get(lineage,2)
-    print('process %s nonORF %sbp ORF %sbp, PE cutoff %s'%(lineage,nonORFlength,ORFlength,PE_cutoff))
+    nonORFlength, ORFlength = find_clonal(lineage_short)
+    PE_cutoff = Donor_species.get(lineage, 2)
+    print('process %s nonORF %sbp ORF %sbp, PE cutoff %s' % (lineage, nonORFlength, ORFlength, PE_cutoff))
     if nonORFlength == 0:
-        print('no clonal infor for %s in %s'%(lineage,clonal_file))
+        print('no clonal infor for %s in %s' % (lineage, clonal_file))
     else:
         # load gene length
         assembly = find_assemlby(lineage_short)

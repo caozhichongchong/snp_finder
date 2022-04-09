@@ -7,7 +7,7 @@ input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/'
 
 input_coassembly = '%s/co-assembly'%(output_folder)
 input_bs_file = '%s/binding_results_ccpA.txt'%(output_folder)
-motif_file = '%s/T17A.meme'%(output_folder)
+motif_file = '%s/A23V.meme'%(output_folder)
 script_file = '%s/fimo/'%(input_script)
 script_file2 = '%s/predictaa/'%(input_script)
 length_halfBS = 7
@@ -30,7 +30,7 @@ for lines in open(input_bs_file,'r'):
         species = lines_set[4].split('_')[0]
         donor = lines_set[5]
         SNP = lines_set[3]
-        if SNP == 'T17A':
+        if SNP == 'A23V':
             CL.setdefault(species,set())
             CL[species].add(donor)
 

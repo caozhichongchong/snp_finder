@@ -20,9 +20,9 @@ required.add_argument("-i",
                       type=str, default='.',
                       metavar='input/')
 required.add_argument("-vcf",
-                      help="file extension of vcfs with only SNPs(.flt.snp.vcf)",
-                      type=str, default='.flt.snp.vcf',
-                      metavar='.flt.snp.vcf')
+                      help="file extension of vcfs with only SNPs(.filtered.vcf)",
+                      type=str, default='.filtered.vcf',
+                      metavar='.filtered.vcf')
 # optional input genome
 optional.add_argument("-cluster",
                       help="a cluster to run, default is all clusters",
@@ -42,6 +42,15 @@ optional.add_argument('-pro',
                           help="Optional: complete path to prodigal if not in PATH",
                           metavar="/usr/local/bin/prodigal",
                           action='store', default='prodigal', type=str)
+# optional cutoff setup
+optional.add_argument('-rec',
+                          help="Optional: recombination region cutoff (default 5000 bp)",
+                          metavar="5000-50000",
+                          action='store', default=5000, type=int)
+optional.add_argument('-contig',
+                          help="Optional: contig length cutoff (default 2000 bp)",
+                          metavar="5000-50000",
+                          action='store', default=5000, type=int)
 
 ################################################## Definition ########################################################
 args = parser.parse_args()
@@ -52,6 +61,10 @@ ref_filename = '.fasta'
 bowtie_filter = True
 load_baseline = False
 ################################################### Set up ########################################################
+# set up steps
+SNP_cluster = dict()
+cluster_set = set()
+separate_donor_genome = []
 # Set up A T G C
 Allels = dict()
 Allels['A']=0
@@ -61,10 +74,12 @@ Allels['C']=3
 Allels['-']=4
 Allels_order = ['A','T','G','C','-']
 
+end_cutoff = 60 # contig end no SNP calling -> not used
 min_qual_for_call = 20 #Remove sample*candidate that has lower than this quality
 min_maf_for_call = .9 #Remove sample*candidate
-min_cov = 3 # at least 3 reads mapped to POS
-min_cov_for_call_per_strand_round = 3 #Remove sample*candidate
+min_cov = 5 #2 # at least 2 reads mapped to POS
+min_cov_for_call_per_strand = 5 #Remove sample*candidate
+CHR_length_cutoff = args.contig # minimum ref contig length
 pair_strand = False # min_cov_for_call_per_strand for each straind
 
 ################################################### Function ########################################################
@@ -76,9 +91,11 @@ def ALT_freq(Allels_count):
     ALT_frq_set = set()
     for alleles in range(0, 5):
         ALT_frq = int(Allels_count[alleles])
-        ALT_set.setdefault(ALT_frq, set())
-        ALT_set[ALT_frq].add(alleles)
-        ALT_frq_set.add(ALT_frq)
+        if ALT_frq >= min_cov:
+            # each ALT
+            ALT_set.setdefault(ALT_frq, set())
+            ALT_set[ALT_frq].add(alleles)
+            ALT_frq_set.add(ALT_frq)
     ALT_frq_set = sorted(ALT_frq_set,reverse=True)
     for ALT_frq in ALT_frq_set:
         for alleles in ALT_set[ALT_frq]:
@@ -205,17 +222,15 @@ def SNP_check_fq(lines_set,vcf_file_list,vcf_file_list_freq,vcf_file_list_vcf,vc
     POS = int(lines_set[1])
     CHRPOS = '%s\t%s' % (CHR, POS)
     if CHRPOS not in CHRPOS_set:
-    # SNP not in baseline genome
-        SNP_quality = lines_set[5]
+        SNP_quality = float(lines_set[5])
         allels_set += lines_set[4].split(',')
         Total_alleles = len(allels_set)
         Subdepth_all = lines_set_sub[0]
-        Qual = float(SNP_quality)
-        if Qual >= min_qual_for_call:
+        if SNP_quality >= min_qual_for_call:
             # Keep SNP that has higher than this quality
             Allels_frq = [0, 0, 0, 0, 0]
             Allels_frq_sub = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            Allels_frq_sub[0] = Qual
+            Allels_frq_sub[0] = SNP_quality
             Subdepth = Subdepth_all.split(':')[-1].replace('\n', '').split(',')
             total_sub_depth = sum(int(Subdepth_sub) for Subdepth_sub in Subdepth)
             Subdepth_forward = [int(i) for i in Subdepth_all.split(':')[-3].split(',')]
@@ -226,61 +241,61 @@ def SNP_check_fq(lines_set,vcf_file_list,vcf_file_list_freq,vcf_file_list_vcf,vc
                 if allels in Allels:
                     forward = Subdepth_forward[num_allels]
                     reverse = Subdepth_reverse[num_allels]
+                    # for each ALT
                     Allels_frq[Allels[allels]] += reverse + forward
                     Allels_frq_sub[Allels[allels] * 2 + 1] += forward
                     Allels_frq_sub[Allels[allels] * 2 + 2] += reverse
-                else:
-                    pass
             # find major alt and calculate frequency
             if sum(Allels_frq) > 0:
                 Major_ALT, Minor_ALT = ALT_freq(Allels_frq)
-                MAF = Major_ALT[1] / total_sub_depth
-                if Major_ALT[0] not in [REF,'-']:
-                    if (MAF == 1 and total_sub_depth >= min_cov) or (MAF >= min_maf_for_call and
-                                                                     total_sub_depth >= min_cov_for_call_per_strand * 2):
-                        if not pair_strand or \
-                                sum(Subdepth_forward) >= min_cov_for_call_per_strand and \
-                                sum(Subdepth_reverse) >= min_cov_for_call_per_strand:
-                                temp_snp_line_frq.append(';'.join(str(frq_sub) for frq_sub in Allels_frq_sub))
-                                temp_snp_line_frq2.append(';'.join(str(frq_sub) for frq_sub in Allels_frq_sub[1:]))
-                                # a potential SNP
-                                # calculate NS
-                                gene_info = contig_to_gene(CHR, POS)
-                                if gene_info != []:
-                                    Chr_gene, POS_gene, codon_start, Ref_seq_chr, Reverse_chr = gene_info
-                                    if Ref_seq_chr != 'None':
-                                        #  observed NS ratio calculated
-                                        temp_snp_line_NS = [Chr_gene, str(POS_gene), '']
-                                        if codon_start <= POS_gene - 1:
-                                            Ref_seq_chr = causeSNP(Ref_seq_chr, POS_gene, REF, Reverse_chr)
-                                            Ref_seq_codon = Ref_seq_chr[codon_start:(codon_start + 3)]
-                                            SNP_seq_chr = Ref_seq_chr
-                                            if len(Ref_seq_codon) == 3:
-                                                Ref_seq_aa = translate(Ref_seq_codon)[0]
-                                                temp_snp_line_AA += Ref_seq_aa
-                                                SNP_seq_chr = causeSNP(SNP_seq_chr, POS_gene, Major_ALT[0], Reverse_chr)
-                                                SNP_seq_codon = SNP_seq_chr[codon_start:(codon_start + 3)]
-                                                SNP_seq_aa = translate(SNP_seq_codon)[0]
-                                                temp_snp_line_AA += SNP_seq_aa
-                                                temp_NorS = dnORds(Ref_seq_aa, SNP_seq_aa)
-                                                temp_snp_line_NS[-1] += temp_NorS
-                                # output lines and output major alt
-                                temp_snp_line.append(CHR)
-                                temp_snp_line.append(str(POS))
-                                temp_snp_line.append(REF)
-                                temp_snp_line.append(Major_ALT[0])
-                                vcf_file_list.append(
-                                    '\t'.join(temp_snp_line) + '\t' + '\t'.join(temp_snp_line_frq2) + '\t\"%s\"\t%s\t%s\t%s\n' % (
-                                        '1', 'PASS', '\t'.join(temp_snp_line_NS),
-                                        temp_snp_line_AA))
-                                vcf_file_list_freq.append(
-                                    '\t'.join(temp_snp_line) + '\t\"%s\"\t\"%s\"\t%s\t%s\t%s\t%s\n' % (
-                                        'None',
-                                        '1',
-                                        Qual, '\t'.join(temp_snp_line_NS),
-                                        temp_snp_line_AA, '\t'.join(temp_snp_line_frq)))
-                                vcf_file_POS_candidate.add('%s\t%s\t' % (CHR, POS))
-                                vcf_file_list_vcf.append('\t'.join(lines_set[0:9]) + '\t' + '\t'.join(lines_set_sub) + '\n')
+                if Major_ALT!= []:
+                    MAF = Major_ALT[1] / total_sub_depth
+                    if Major_ALT[0] not in [REF,'-']:
+                        if (MAF == 1 and total_sub_depth >= min_cov) or (MAF >= min_maf_for_call and
+                                                                         total_sub_depth >= min_cov_for_call_per_strand * 2):
+                            if not pair_strand or \
+                                    sum(Subdepth_forward) >= min_cov_for_call_per_strand and \
+                                    sum(Subdepth_reverse) >= min_cov_for_call_per_strand:
+                                    temp_snp_line_frq.append(';'.join(str(frq_sub) for frq_sub in Allels_frq_sub))
+                                    temp_snp_line_frq2.append(';'.join(str(frq_sub) for frq_sub in Allels_frq_sub[1:]))
+                                    # a potential SNP
+                                    # calculate NS
+                                    gene_info = contig_to_gene(CHR, POS)
+                                    if gene_info != []:
+                                        Chr_gene, POS_gene, codon_start, Ref_seq_chr, Reverse_chr = gene_info
+                                        if Ref_seq_chr != 'None':
+                                            #  observed NS ratio calculated
+                                            temp_snp_line_NS = [Chr_gene, str(POS_gene), '']
+                                            if codon_start <= POS_gene - 1:
+                                                Ref_seq_chr = causeSNP(Ref_seq_chr, POS_gene, REF, Reverse_chr)
+                                                Ref_seq_codon = Ref_seq_chr[codon_start:(codon_start + 3)]
+                                                SNP_seq_chr = Ref_seq_chr
+                                                if len(Ref_seq_codon) == 3:
+                                                    Ref_seq_aa = translate(Ref_seq_codon)[0]
+                                                    temp_snp_line_AA += Ref_seq_aa
+                                                    SNP_seq_chr = causeSNP(SNP_seq_chr, POS_gene, Major_ALT[0], Reverse_chr)
+                                                    SNP_seq_codon = SNP_seq_chr[codon_start:(codon_start + 3)]
+                                                    SNP_seq_aa = translate(SNP_seq_codon)[0]
+                                                    temp_snp_line_AA += SNP_seq_aa
+                                                    temp_NorS = dnORds(Ref_seq_aa, SNP_seq_aa)
+                                                    temp_snp_line_NS[-1] += temp_NorS
+                                    # output lines and output major alt
+                                    temp_snp_line.append(CHR)
+                                    temp_snp_line.append(str(POS))
+                                    temp_snp_line.append(REF)
+                                    temp_snp_line.append(Major_ALT[0])
+                                    vcf_file_list.append(
+                                        '\t'.join(temp_snp_line) + '\t' + '\t'.join(temp_snp_line_frq2) + '\t\"%s\"\t%s\t%s\t%s\n' % (
+                                            '1', 'PASS', '\t'.join(temp_snp_line_NS),
+                                            temp_snp_line_AA))
+                                    vcf_file_list_freq.append(
+                                        '\t'.join(temp_snp_line) + '\t\"%s\"\t\"%s\"\t%s\t%s\t%s\t%s\n' % (
+                                            'None',
+                                            '1',
+                                            SNP_quality, '\t'.join(temp_snp_line_NS),
+                                            temp_snp_line_AA, '\t'.join(temp_snp_line_frq)))
+                                    vcf_file_POS_candidate.add('%s\t%s\t' % (CHR, POS))
+                                    vcf_file_list_vcf.append('\t'.join(lines_set[0:9]) + '\t' + '\t'.join(lines_set_sub) + '\n')
     return [vcf_file_list,vcf_file_list_freq,vcf_file_list_vcf,vcf_file_POS_candidate]
 
 def SNP_check_mapper(lines_set,vcf_file_list,vcf_file_list_freq,vcf_file_list_vcf,vcf_file_POS_candidate, min_cov_for_call_per_strand):
@@ -295,7 +310,6 @@ def SNP_check_mapper(lines_set,vcf_file_list,vcf_file_list_freq,vcf_file_list_vc
     POS = int(lines_set[1])
     CHRPOS = '%s\t%s' % (CHR, POS)
     if CHRPOS not in CHRPOS_set:
-        # SNP not in baseline genome
         allels_set += lines_set[3].split(',')
         Total_alleles = len(allels_set)
         Subdepth_all = lines_set[5]
@@ -308,66 +322,67 @@ def SNP_check_mapper(lines_set,vcf_file_list,vcf_file_list_freq,vcf_file_list_vc
             if allels in Allels:
                 forward = float(Subdepth[num_allels].split(',')[0])
                 reverse = float(Subdepth[num_allels].split(',')[1])
+                # for each ALT
                 Allels_frq[Allels[allels]] += forward + reverse
                 Allels_frq_sub[Allels[allels] * 2] += forward
                 Allels_frq_sub[Allels[allels] * 2 + 1] += reverse
-            else:
-                pass
         total_sub_depth = sum(Allels_frq)
         # find major alt and calculate frequency
-        if total_sub_depth > 0:
+        if sum(Allels_frq) > 0:
             Major_ALT, Minor_ALT = ALT_freq(Allels_frq)
-            MAF = Major_ALT[1] / total_sub_depth
-            if Major_ALT[0] not in [REF, '-']:
-                if (MAF == 1 and total_sub_depth >= min_cov) or (MAF >= min_maf_for_call and
-                                                                 total_sub_depth >= min_cov_for_call_per_strand * 2):
-                    if not pair_strand or \
-                            sum(Subdepth_forward) >= min_cov_for_call_per_strand and \
-                            sum(Subdepth_reverse) >= min_cov_for_call_per_strand:
-                        temp_snp_line_frq.append(';'.join(str(frq_sub) for frq_sub in Allels_frq_sub))
-                        temp_snp_line_frq2.append(';'.join(str(frq_sub) for frq_sub in Allels_frq_sub[1:]))
-                        # a potential SNP
-                        # calculate NS
-                        gene_info = contig_to_gene(CHR, POS)
-                        if False and gene_info != []: # disabled
-                            Chr_gene, POS_gene, codon_start, Ref_seq_chr, Reverse_chr = gene_info
-                            if Ref_seq_chr != 'None':
-                                #  observed NS ratio calculated
-                                temp_snp_line_NS = [Chr_gene, str(POS_gene), '']
-                                if codon_start <= POS_gene - 1:
-                                    Ref_seq_chr = causeSNP(Ref_seq_chr, POS_gene, REF, Reverse_chr)
-                                    Ref_seq_codon = Ref_seq_chr[codon_start:(codon_start + 3)]
-                                    SNP_seq_chr = Ref_seq_chr
-                                    if len(Ref_seq_codon) == 3:
-                                        Ref_seq_aa = translate(Ref_seq_codon)[0]
-                                        temp_snp_line_AA += Ref_seq_aa
-                                        SNP_seq_chr = causeSNP(SNP_seq_chr, POS_gene, Major_ALT[0], Reverse_chr)
-                                        SNP_seq_codon = SNP_seq_chr[codon_start:(codon_start + 3)]
-                                        SNP_seq_aa = translate(SNP_seq_codon)[0]
-                                        temp_snp_line_AA += SNP_seq_aa
-                                        temp_NorS = dnORds(Ref_seq_aa, SNP_seq_aa)
-                                        temp_snp_line_NS[-1] += temp_NorS
-                        # output lines and output major alt
-                        temp_snp_line.append(CHR)
-                        temp_snp_line.append(str(POS))
-                        temp_snp_line.append(REF)
-                        temp_snp_line.append(Major_ALT[0])
-                        vcf_file_list.append(
-                            '\t'.join(temp_snp_line) + '\t' + '\t'.join(temp_snp_line_frq2) + '\t\"%s\"\t%s\t%s\t%s\n' % (
-                                '1', 'PASS', '\t'.join(temp_snp_line_NS),
-                                temp_snp_line_AA))
-                        vcf_file_list_freq.append(
-                            '\t'.join(temp_snp_line) + '\t\"%s\"\t\"%s\"\t%s\t%s\t%s\t%s\n' % (
-                                'None',
-                                '1',
-                                'PASS', '\t'.join(temp_snp_line_NS),
-                                temp_snp_line_AA, '\t'.join(temp_snp_line_frq)))
-                        vcf_file_POS_candidate.add('%s\t%s\t' % (CHR, POS))
-                        vcf_file_list_vcf.append('\t'.join(lines_set) + '\n')
+            if Major_ALT != []:
+                MAF = Major_ALT[1] / total_sub_depth
+                if Major_ALT[0] not in [REF, '-']:
+                    if (MAF == 1 and total_sub_depth >= min_cov) or (MAF >= min_maf_for_call and
+                                                                     total_sub_depth >= min_cov_for_call_per_strand * 2):
+                        if not pair_strand or \
+                                sum(Subdepth_forward) >= min_cov_for_call_per_strand and \
+                                sum(Subdepth_reverse) >= min_cov_for_call_per_strand:
+                            temp_snp_line_frq.append(';'.join(str(frq_sub) for frq_sub in Allels_frq_sub))
+                            temp_snp_line_frq2.append(';'.join(str(frq_sub) for frq_sub in Allels_frq_sub[1:]))
+                            # a potential SNP
+                            # calculate NS
+                            gene_info = contig_to_gene(CHR, POS)
+                            if False and gene_info != []: # disabled
+                                Chr_gene, POS_gene, codon_start, Ref_seq_chr, Reverse_chr = gene_info
+                                if Ref_seq_chr != 'None':
+                                    #  observed NS ratio calculated
+                                    temp_snp_line_NS = [Chr_gene, str(POS_gene), '']
+                                    if codon_start <= POS_gene - 1:
+                                        Ref_seq_chr = causeSNP(Ref_seq_chr, POS_gene, REF, Reverse_chr)
+                                        Ref_seq_codon = Ref_seq_chr[codon_start:(codon_start + 3)]
+                                        SNP_seq_chr = Ref_seq_chr
+                                        if len(Ref_seq_codon) == 3:
+                                            Ref_seq_aa = translate(Ref_seq_codon)[0]
+                                            temp_snp_line_AA += Ref_seq_aa
+                                            SNP_seq_chr = causeSNP(SNP_seq_chr, POS_gene, Major_ALT[0], Reverse_chr)
+                                            SNP_seq_codon = SNP_seq_chr[codon_start:(codon_start + 3)]
+                                            SNP_seq_aa = translate(SNP_seq_codon)[0]
+                                            temp_snp_line_AA += SNP_seq_aa
+                                            temp_NorS = dnORds(Ref_seq_aa, SNP_seq_aa)
+                                            temp_snp_line_NS[-1] += temp_NorS
+                            # output lines and output major alt
+                            temp_snp_line.append(CHR)
+                            temp_snp_line.append(str(POS))
+                            temp_snp_line.append(REF)
+                            temp_snp_line.append(Major_ALT[0])
+                            vcf_file_list.append(
+                                '\t'.join(temp_snp_line) + '\t' + '\t'.join(temp_snp_line_frq2) + '\t\"%s\"\t%s\t%s\t%s\n' % (
+                                    '1', 'PASS', '\t'.join(temp_snp_line_NS),
+                                    temp_snp_line_AA))
+                            vcf_file_list_freq.append(
+                                '\t'.join(temp_snp_line) + '\t\"%s\"\t\"%s\"\t%s\t%s\t%s\t%s\n' % (
+                                    'None',
+                                    '1',
+                                    'PASS', '\t'.join(temp_snp_line_NS),
+                                    temp_snp_line_AA, '\t'.join(temp_snp_line_frq)))
+                            vcf_file_POS_candidate.add('%s\t%s\t' % (CHR, POS))
+                            vcf_file_list_vcf.append('\t'.join(lines_set) + '\n')
     return [vcf_file_list,vcf_file_list_freq,vcf_file_list_vcf,vcf_file_POS_candidate]
 
 def load_sample(vcf_file):
     Sample_name = []
+    print(os.path.join(args.smp,os.path.split(vcf_file)[-1].split(args.vcf)[0])+'.vcf.sh')
     for lines in open(os.path.join(args.smp,os.path.split(vcf_file)[-1].split(args.vcf)[0])+'.vcf.sh', 'r'):
         if ' -x ' in lines:
             # set database for bowtie
@@ -384,16 +399,16 @@ def load_sample(vcf_file):
             database_file = lines.split('bwa mem ')[1].split(' ')[0]
             Sample_name.append(os.path.split(lines.split('bwa mem ')[1].split(' ')[1])[-1])
             break
-    print(database_file, Sample_name)
+    print(database_file,Sample_name)
     if database_file.split('.')[-1] != '.fna':
         # not gene file
         try:
             f1 = open(database_file + '.fna', 'r')
         except FileNotFoundError:
-            print('%s -q -i %s -d %s.fna' % (args.pro, database_file, database_file))
             os.system('%s -q -i %s -d %s.fna' % (args.pro, database_file, database_file))
         database_file = database_file + '.fna'
     return [database_file,Sample_name]
+
 
 def load_sample_mapper(vcf_file):
     Sample_name = []
@@ -403,13 +418,11 @@ def load_sample_mapper(vcf_file):
             database_file = lines.split(' --reference ')[1].split(' --queries')[0]
             Sample_name.append(os.path.split(lines.split(' --queries ')[1].split(' --out-vcf')[0])[-1])
             break
-    print(database_file, Sample_name)
     if database_file.split('.')[-1] != '.fna':
         # not gene file
         try:
             f1 = open(database_file + '.fna', 'r')
         except FileNotFoundError:
-            print('%s -q -i %s -d %s.fna' % (args.pro, database_file, database_file))
             os.system('%s -q -i %s -d %s.fna' % (args.pro, database_file, database_file))
         database_file = database_file + '.fna'
     return [database_file,Sample_name]
@@ -423,6 +436,19 @@ def contig_length(CHR):
         except IndexError:
             total_length = 100000
     return int(total_length)
+
+def short_contig_end(CHR,POS):
+    total_length = contig_length(CHR)
+    if total_length >= CHR_length_cutoff:
+        if int(POS) <= end_cutoff or int(POS) >= total_length - end_cutoff + 1:
+            # not short but end
+            return True
+        else:
+            # not short not end
+            return False
+    else:
+        # short
+        return True
 
 def SNP_filter(vcf_file,Sample_name,output_name,min_cov_for_call_per_strand, bowtie = True):
     vcf_file_list = []
@@ -485,9 +511,9 @@ if bowtie_filter:
         allvcf_file = glob.glob(os.path.join(args.i, '%s*%s' % (args.cluster, args.vcf)))
     else:
         allvcf_file = glob.glob(os.path.join(args.i, '*%s' % (args.vcf)))
-    allvcf_file.sort()
     print(allvcf_file)
     allCHRPOS = dict()
+    allvcf_file.sort()
     for vcf_file in allvcf_file:
         try:
             f1 = open(vcf_file + '.%s.snpfreq.txt' % (output_name), 'r')
@@ -498,8 +524,8 @@ if bowtie_filter:
             vcf_0 = vcf_file.replace('.%s.SNP.fasta' % (SNP_num), '.0.SNP.fasta') + '.%s.snpfreq.txt' % (output_name)
             CHRPOS_set = []
             if load_baseline and SNP_num != '0':
-                print('%s load base line %s' % (datetime.now(), vcf_0))
                 if vcf_0 not in allCHRPOS:
+                    print('%s load base line %s' % (datetime.now(), vcf_0))
                     CHRPOS_set = load_CHRPOS(vcf_0)
                     allCHRPOS = dict()
                     allCHRPOS.setdefault(vcf_0, CHRPOS_set)
@@ -510,13 +536,12 @@ if bowtie_filter:
             database_file, Sample_name = load_sample(vcf_file)
             if Ref_seq == dict():
                 Ref_seq, Mapping, Mapping_loci, Reverse = loaddatabase(database_file)
-            print('%s load database %s' % (datetime.now(), database_file))
             Total = len(Sample_name)
             print('%s running %s genomes in %s' % (datetime.now(), Total, donor_species_sub))
             # SNP filtering
             print('%s start filtering SNPs %s' % (datetime.now(), donor_species_sub))
             SNP_filter(vcf_file, Sample_name, output_name,
-                       min_cov_for_call_per_strand_round, True)
+                       min_cov_for_call_per_strand, True)
 
 # run vcf filtering for mapper
 if args.cluster != 'None':
@@ -524,23 +549,25 @@ if args.cluster != 'None':
 else:
     allvcf_file = glob.glob(os.path.join(args.i, '*mapper1.vcf'))
 
-allvcf_file.sort()
 print(allvcf_file)
 allCHRPOS = dict()
+allvcf_file.sort()
 for vcf_file in allvcf_file:
-    os.system('grep \';\' %s > %s.snp'%(vcf_file,vcf_file))
+    try:
+        f1 = open(vcf_file + '.snp','r')
+    except IOError:
+        os.system('grep \';\' %s > %s.snp'%(vcf_file,vcf_file))
     try:
         f1 = open(vcf_file + '.%s.snpfreq.txt'%(output_name),'r')
     except IOError:
         # load baseline
         donor_species = os.path.split(vcf_file)[-1]
         SNP_num = vcf_file.split('.SNP.fasta')[0].split('.')[-1]
-        vcf_0 = vcf_file.replace('.%s.SNP.fasta' % (SNP_num), '.0.SNP.fasta') + '.%s.snpfreq.txt' % (
-            output_name)
+        vcf_0 = vcf_file.replace('.%s.SNP.fasta' % (SNP_num), '.0.SNP.fasta') + '.%s.snpfreq.txt' % (output_name)
         CHRPOS_set = []
         if load_baseline and SNP_num != '0':
-            print('%s load base line %s' % (datetime.now(), vcf_0))
             if vcf_0 not in allCHRPOS:
+                print('%s load base line %s' % (datetime.now(), vcf_0))
                 CHRPOS_set = load_CHRPOS(vcf_0)
                 allCHRPOS = dict()
                 allCHRPOS.setdefault(vcf_0, CHRPOS_set)
@@ -551,12 +578,11 @@ for vcf_file in allvcf_file:
         database_file, Sample_name = load_sample_mapper(vcf_file)
         if Ref_seq == dict():
             Ref_seq, Mapping, Mapping_loci, Reverse = loaddatabase(database_file)
-        print('%s load database %s' % (datetime.now(), database_file))
         Total = len(Sample_name)
         print('%s running %s genomes in %s' % (datetime.now(), Total, donor_species_sub))
         # SNP filtering
         print('%s start filtering SNPs %s' % (datetime.now(), donor_species_sub))
         SNP_filter(vcf_file + '.snp', Sample_name, output_name,
-                   min_cov_for_call_per_strand_round, False)
+                   min_cov_for_call_per_strand, False)
 
 

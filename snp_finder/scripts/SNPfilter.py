@@ -1,0 +1,176 @@
+import glob
+import os
+from datetime import datetime
+import argparse
+############################################ Arguments and declarations ##############################################
+parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
+required = parser.add_argument_group('required arguments')
+optional = parser.add_argument_group('optional arguments')
+required.add_argument("-i",
+                      help="path to all vcf files",
+                      type=str, default='.',
+                      metavar='input/')
+# optional input genome
+optional.add_argument("-cluster",
+                      help="a cluster to run, default is all clusters",
+                      type=str, default='',
+                      metavar='cluster1')
+################################################## Definition ########################################################
+args = parser.parse_args()
+################################################### Set up ########################################################
+# Set up cutoff
+min_qual_for_call = 41.9 #Remove sample*candidate that has lower than this quality
+min_maf_for_call = .9 #Remove sample*candidate
+min_cov = 3 # at least 3 reads mapped to POS
+if 'human' in args.i:
+    min_cov = 5
+    # -q 20 -Q 20
+    ## Remove SNPs within 5 bases of an INDEL
+    ## light filter for max missing 50%, minimum depth of 5 (per genotype), bi-allelic calls, minimum quality phred 20
+    #--max-missing <float> Exclude sites on the basis of the proportion of missing data (defined to be between 0 and 1, where 0 allows sites that are completely missing and 1 indicates no missing data allowed).
+    ## Remove individuals missing 30% data in conjunction with the light filter
+    ## Apply stringent filter:
+    ## Exclude individuals missing 30% of data and loci that are missing 20% of data
+    ## some filters are redundant in case steps are run out of order
+    ## apply minimum genotypic depth of 8
+    ## Apply minor allele frequency filter for a population
+bowtievcfsuffix = '.flt.snp.vcf'
+mappervcfsuffix = '.mapper1.vcf'
+compare_to_baseline = False
+################################################### Function ########################################################
+def filter_snp(depthall,depthsnp):
+    MAF = depthsnp/depthall
+    if (MAF == 1 and depthsnp >= min_cov) or \
+            (MAF >= min_maf_for_call and depthsnp >= min_cov * 2):
+        return True
+    return False
+
+def load_baselinesnp(bowtievcf):
+    baseline_chrpos = set()
+    for lines in open(bowtievcf + '.final.txt', 'r'):
+        lines_set = lines.split('\n')[0].split('\t')
+        baseline_chrpos.add('%s\t%s'%(lines_set[0],lines_set[1]))
+    return baseline_chrpos
+
+def load_bowtie(bowtievcf):
+    try:
+        f1 = open(bowtievcf + '.final2.txt', 'r')
+    except IOError:
+        baseline_chrpos = set()
+        if compare_to_baseline:
+            # load baseline
+            numsnp = os.path.split(bowtievcf)[-1].split('.SNP.fasta')[0].split('.')[-1]
+            tool = os.path.split(bowtievcf)[-1].split('.SNP.fasta.')[-1].split('.flt.snp.vcf')[0]
+            if numsnp != '0':
+                baselinegenome = bowtievcf.replace('%s.SNP.fasta'%(numsnp),'0.SNP.fasta')
+                print('%s start loading baseline %s' % (datetime.now(), baselinegenome))
+                if baselinegenome not in baseline_set:
+                    baseline_set.setdefault(baselinegenome + tool,load_baselinesnp(baselinegenome))
+                baseline_chrpos = baseline_set[baselinegenome + tool]
+                print('%s finished loading baseline %s' % (datetime.now(), baselinegenome))
+        # grep all snps
+        vcfoutput = []
+        snpoutput = ['CHR\tPOS\tREF\tALT\tDPall\tDPsnp\n']
+        # load each line of snps
+        snpline = 0
+        for lines in open(bowtievcf, 'r'):
+            snpline += 1
+            lines_set = lines.split('\n')[0].split('\t')
+            CHR, POS, USELESS, REF, ALT, QUAL = lines_set[:6]
+            ALT = ALT.split(',')
+            if REF != 'N' and float(QUAL) >= min_qual_for_call:
+                if baseline_chrpos== set() or '%s\t%s'%(CHR,POS) not in baseline_chrpos:
+                    withsnp = False
+                    DPset = [float(x) for x in lines_set[9].split(':')[-1].replace('\n', '').split(',')]
+                    DP = sum(DPset)
+                    for i in range(0, len(ALT)):
+                        # each potential ALT
+                        depthsnp = DPset[i+1]# skip REF
+                        if filter_snp(DP, depthsnp):
+                            # a qualified snp
+                            withsnp = True
+                            snpoutput.append('%s\t%s\t%s\t%s\t%s\t%s\n' % (CHR, POS, REF, ALT[i], DP, depthsnp))
+                    if withsnp:
+                        vcfoutput.append(lines)
+            if snpline % 1000000 == 0:
+                print(datetime.now(), 'processed %s lines' % (snpline))
+        # output qualified snps
+        f1 = open(bowtievcf + '.final.vcf','w')
+        f1.write(''.join(vcfoutput))
+        f1.close()
+        f1 = open(bowtievcf + '.final.txt', 'w')
+        f1.write(''.join(snpoutput))
+        f1.close()
+
+def load_mapper(mappervcf):
+    try:
+        f1 = open(mappervcf + '.final.txt', 'r')
+    except IOError:
+        # grep all snps
+        os.system('grep \';\' %s > %s.snp' % (mappervcf, mappervcf))
+        vcfoutput = ['']
+        snpoutput = ['CHR\tPOS\tREF\tALT\tDPall\tDPsnp\n']
+        # load each line of snps
+        snpline = 0
+        baseline_chrpos = set()
+        if compare_to_baseline:
+            # load baseline
+            numsnp = os.path.split(mappervcf)[-1].split('.SNP.fasta')[0].split('.')[-1]
+            if numsnp != '0':
+                baselinegenome = mappervcf.replace('%s.SNP.fasta' % (numsnp), '0.SNP.fasta')
+                tool = os.path.split(mappervcf)[-1].split('.SNP.fasta.')[-1].split('.flt.snp.vcf')[0]
+                print('%s start loading baseline %s' % (datetime.now(), baselinegenome))
+                if baselinegenome not in baseline_set:
+                    baseline_set.setdefault(baselinegenome + tool, load_baselinesnp(baselinegenome))
+                baseline_chrpos = baseline_set[baselinegenome + tool]
+                print('%s finished loading baseline %s' % (datetime.now(), baselinegenome))
+        for lines in open(mappervcf + '.snp', 'r'):
+            snpline += 1
+            if not lines.startswith("CHR"):
+                lines_set = lines.split('\n')[0].split('\t')
+                CHR,POS,REF,ALT,DP,middleDP,endDP = lines_set[:7]
+                ALT = ALT.split(',')
+                if REF not in ['N','-']:
+                    if baseline_chrpos == set() or '%s\t%s' % (CHR, POS) not in baseline_chrpos:
+                        withsnp = False
+                        DP = float(DP)
+                        middleDP = [x for x in middleDP.split(';')]
+                        endDP = [x for x in endDP.split(';')]
+                        for i in range(0,len(ALT)):
+                            # each potential ALT
+                            if ALT[i] != '-':
+                                # not indel
+                                # using both middle and end depth
+                                depthsnp = sum([float(x) for x in middleDP[i+1].split(',')]) + sum([float(x) for x in endDP[i+1].split(',')]) # skip REF
+                                if filter_snp(DP, depthsnp):
+                                    # a qualified snp
+                                    withsnp = True
+                                    snpoutput.append('%s\t%s\t%s\t%s\t%s\t%s\n'%(CHR,POS,REF,ALT[i],DP,depthsnp))
+                        if withsnp:
+                            vcfoutput.append(lines)
+            if snpline % 1000000 == 0:
+                print(datetime.now(), 'processed %s lines' % (snpline))
+        # output qualified snps
+        f1 = open(mappervcf + '.final.vcf','w')
+        f1.write(''.join(vcfoutput))
+        f1.close()
+        f1 = open(mappervcf + '.final.txt', 'w')
+        f1.write(''.join(snpoutput))
+        f1.close()
+
+# find all snp vcfs
+allvcf_bowtie = glob.glob('%s/%s*%s'%(args.i,args.cluster,bowtievcfsuffix))
+allvcf_bowtie.sort()
+allvcf_mapper = glob.glob('%s/%s*%s'%(args.i,args.cluster,mappervcfsuffix))
+allvcf_mapper.sort()
+# process bowtie vcfs
+baseline_set = dict()
+for bowtievcf in allvcf_bowtie:
+    print('%s start processing %s' % (datetime.now(), bowtievcf))
+    load_bowtie(bowtievcf)
+    print('%s finished processing %s' % (datetime.now(), bowtievcf))
+# process mapper vcfs
+for mappervcf in allvcf_mapper:
+    print('%s start processing %s' % (datetime.now(), mappervcf))
+    load_mapper(mappervcf)
+    print('%s finished processing %s' % (datetime.now(), mappervcf))

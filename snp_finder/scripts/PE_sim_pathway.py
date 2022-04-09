@@ -25,6 +25,10 @@ required.add_argument("-pe",
                       help="input annotation of PE",
                       type=str, default='/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/details/summary/all.selected.gene.faa.cluster.aa.all.eggnog.sum.species.sum',
                       metavar='all.selected.gene.faa.cluster.aa.all.eggnog.sum.species.sum')
+required.add_argument("-species",
+                      help="species name",
+                      type=str, default='None',
+                      metavar='BA, BL, PaDi')
 
 ################################################## Definition ########################################################
 args = parser.parse_args()
@@ -32,6 +36,9 @@ workingdir=os.path.abspath(os.path.dirname(__file__))
 # set up parameters
 simulation_round = 1000
 summary_file = os.path.join(os.path.split(args.pe)[0],'all.PE.pathway.sim')
+if args.species != 'None':
+    summary_file += '.%s' % (args.species)
+checkflexible = False
 ################################################### Function ########################################################
 
 def load_anno(annnofile,CL_set):
@@ -40,17 +47,19 @@ def load_anno(annnofile,CL_set):
     if CL_set == set():
         CL_set_setup = True
     for lines in open(annnofile,'r'):
-        lines_set = lines.split('\n')[0].split('\t')
-        if lines_set[-2] == 'False' or lines_set[-1] == 'False':
-            # flexible genes
-            genename = lines_set[4]
-            CL = genename.split('__')[0]
-            COG2 = lines_set[9]
-            if CL_set_setup:
-                CL_set.add(CL)
-                Anno.setdefault(genename, COG2)
-            elif CL in CL_set:
-                Anno.setdefault(genename, COG2)
+        if not lines.startswith('cluster'):
+            lines_set = lines.split('\n')[0].split('\t')
+            if not checkflexible or lines_set[-2] == 'False' or lines_set[-1] == 'False':
+                # flexible genes
+                genename = lines_set[4]
+                if args.species == 'None' or args.species in genename:
+                    CL = genename.split('__')[0]
+                    COG2 = lines_set[9]
+                    if CL_set_setup:
+                        CL_set.add(CL)
+                        Anno.setdefault(genename, COG2)
+                    elif CL in CL_set:
+                        Anno.setdefault(genename, COG2)
     return [CL_set,Anno]
 
 def load_length(fasta,Anno):

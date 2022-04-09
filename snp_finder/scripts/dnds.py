@@ -230,7 +230,7 @@ class SNP_gene:
 ################################################### Function ########################################################
 
 def translate(seq):
-    seq = Seq(seq)
+    seq = Seq(''.join(seq))
     try:
         return seq.translate()
     except ValueError:
@@ -303,7 +303,7 @@ def expectNSsub(record_name,record_seq,position=0):
     temp_SNP_gene = SNP_gene()
     temp_SNP_gene.init(record_name)
     for i in range(0, (Total - position)):
-        codon = record_seq[(i * 3 + position):((i + 1) * 3 + position)]
+        codon = ''.join(record_seq[(i * 3 + position):((i + 1) * 3 + position)])
         try:
             codon_NSratio = codontable_NSratio[codon]
             temp_SNP_gene.addprotein(codontable[codon])
@@ -327,11 +327,11 @@ def expectNS(record_name,record_seq):
     return temp_result
 
 def causeSNP(seq,position,ALT,Reverse_chr):
+    seq = list(seq)
     if Reverse_chr == 1:
         ALT=str(Seq(ALT).reverse_complement())
-    seq = list(seq)
     seq[position - 1]=ALT
-    return ''.join(seq)
+    return seq
 
 def loaddatabase(database):
     # load database seq
@@ -350,7 +350,6 @@ def loaddatabase(database):
         description = str(record.description).replace(' ', '').split('#')
         contig = '_'.join(record_id.split('_')[0:-1])
         Mapping_loci.setdefault(contig, [])
-        Ref_seq.setdefault(record_id, record_seq)
         Ref_NSratio.setdefault(record_id,
                                expectNS(record_id, record_seq))
         if float(description[3]) == -1.0: # reverse str
@@ -358,12 +357,13 @@ def loaddatabase(database):
         Mapping_loci[contig].append([float(description[1]),
                                      float(description[2]),
                                      record_id])
-    foutput = open(database + '.ref.NS.ratio', 'w')
-    foutput_list = []
-    #for Ref in Ref_NSratio:
-    #    foutput_list.append('%s\t%s\t\n' % (Ref, Ref_NSratio[Ref]))
-    #foutput.write(''.join(foutput_list))
-    #foutput.close()
+    if False:
+        foutput = open(database + '.ref.NS.ratio', 'w')
+        foutput_list = []
+        for Ref in Ref_NSratio:
+            foutput_list.append('%s\t%s\t\n' % (Ref, Ref_NSratio[Ref]))
+        foutput.write(''.join(foutput_list))
+        foutput.close()
     return [Ref_seq,Ref_NSratio,Mapping,Mapping_loci,Reverse]
 
 def contig_to_gene(CHR, POS):
@@ -659,6 +659,7 @@ for codon in codontable:
         REF = codon[position]
         for ALT in Allels_order:
             if ALT != REF:
+                #print(codon,position,ALT)
                 new_codon = causeSNP(codon, position+1, ALT,0)
                 temp_NorS = dnORds(translate(codon)[0], translate(new_codon)[0])
                 SNP_pair = transitions(REF, ALT)

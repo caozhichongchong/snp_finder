@@ -24,6 +24,10 @@ optional.add_argument("-cutoff",
                       help="a file of cutoff of how many SNPs on a gene for each clonal population to call parallel evolution",
                       type=str, default='None',
                       metavar='total_SNP_cutoff.txt')
+optional.add_argument("-sig",
+                      help="a file of lineages with PE significance (PEsig2)",
+                      type=str, default='None',
+                      metavar='total_SNP_cutoff.txt')
 # optional output setup
 optional.add_argument("-s",
                       help="a folder to store all scripts",
@@ -81,11 +85,11 @@ ref_filename = '.noHM.fasta'
 input_summary = output_dir_merge + '/summary/all.species.txt'
 output_gene = output_dir_merge + '/summary/all.selected.gene.faa'
 output_gene_dna = output_dir_merge + '/summary/all.selected.gene.fna'
-compute_species = False # compute dnds for specie, lineage, genus
+compute_parallel = False # whether to find PE across lineages
 annotate_customized = False
 cluster_cutoff = 0.9
-parallele_across_donor = True # across donor or across lineage
-include_across_donor_PE = False # not including PE across donors when computing dnds
+parallel_across_donor = True # across donor or across lineage
+include_across_donor_PE = False # including PE across donors when computing dnds
 try:
     os.mkdir(input_script_sub)
 except IOError:
@@ -181,24 +185,25 @@ def cluster_uc(cluster_input):
         record_name = line_set[8]
         record_name2 = line_set[9]
         Clusters.setdefault(record_name, cluster)
-        if record_name2!= '*':
-            donor_species = record_name.split('__')[0]
-            species = donor_species.split('_')[0]
-            donor_species2 = record_name2.split('__')[0]
-            species2 = donor_species2.split('_')[0]
-            if species == species2:
-                High_select2_SNP.setdefault(record_name, set())
-                High_select2_SNP[record_name].add(record_name2)
-                High_select2_SNP.setdefault(record_name2, set())
-                High_select2_SNP[record_name2].add(record_name)
-    if High_select2_SNP!= dict():
+        if compute_parallel:
+            if record_name2!= '*':
+                donor_species = record_name.split('__')[0]
+                species = donor_species.split('_')[0]
+                donor_species2 = record_name2.split('__')[0]
+                species2 = donor_species2.split('_')[0]
+                if species == species2:
+                    High_select2_SNP.setdefault(record_name, set())
+                    High_select2_SNP[record_name].add(record_name2)
+                    High_select2_SNP.setdefault(record_name2, set())
+                    High_select2_SNP[record_name2].add(record_name)
+    if compute_parallel and High_select2_SNP!= dict():
         for record in High_select2_SNP:
             donor_species = record.split('__')[0]
             species = donor_species.split('_')[0]
             allrecord = set()
             allrecord.add(record)
             allrecord = get_all_cluster(High_select2_SNP,record,allrecord)
-            if parallele_across_donor:
+            if parallel_across_donor:
                 donorset = get_all_donor(allrecord)
             else:
                 donorset = get_all_lineage(allrecord)
@@ -299,63 +304,66 @@ def add_new_selection(input_summary,High_select2):
     # use selected codon NS ratio (SNP pair) * all genes freq
     for lines in open(input_summary, 'r'):
         if not lines.startswith('#'):
-            line_set = lines.split('\n')[0].split('\t')
-            Selected = line_set[-1]
-            if Selected == 'False' and len(line_set) > 20:
-                donor_species = line_set[0]
-                record_id = line_set[1]
-                # all species
-                if record_id == 'allspecies':
-                    # all genes freq
-                    allspecies = [int(line_set[-13]), int(line_set[-11]), int(line_set[-9]),
-                                  int(line_set[-7]), int(line_set[-5]), int(line_set[-3])]
-                    allspecies_highselect = init_highselect_empty(line_set)
-                    allspecies_highselect[1] = 'allspecies_highselect'
-                    newoutput.append(lines)
-                elif record_id in ['allspecies_flexible', 'allspecies_core']:
-                    newoutput.append(lines)
-                elif donor_species == record_id:
-                    genus, species = genus_species(donor_species)
-                    if species != donor_species:
-                        # avoid double recording SNPs
-                        # donor_species not high select set up
-                        line_set = lines.split('\n')[0].split('\t')
-                        donor_species_highselect = init_highselect_notHS(line_set)
-                        Donor_species_notHS.setdefault(donor_species,
-                                                       donor_species_highselect)
-                        line_set = lines.split('\n')[0].split('\t')
-                        donor_species_highselect = init_highselect_empty(line_set)
-                        donor_species_highselect[1] = donor_species + '_highselect'
-                        Donor_species.setdefault(donor_species,
-                                                 donor_species_highselect)
-                        line_set = lines.split('\n')[0].split('\t')
-                        if genus not in Genus_notHS:
-                            genus_highselect = init_highselect_notHS(line_set)
-                            genus_highselect[0] = genus
-                            genus_highselect[1] = genus
-                            Genus_notHS.setdefault(genus, genus_highselect)
+            try:
+                line_set = lines.split('\n')[0].split('\t')
+                Selected = line_set[-1]
+                if Selected == 'False' and len(line_set) > 20:
+                    donor_species = line_set[0]
+                    record_id = line_set[1]
+                    # all species
+                    if record_id == 'allspecies':
+                        # all genes freq
+                        allspecies = [int(line_set[-13]), int(line_set[-11]), int(line_set[-9]),
+                                      int(line_set[-7]), int(line_set[-5]), int(line_set[-3])]
+                        allspecies_highselect = init_highselect_empty(line_set)
+                        allspecies_highselect[1] = 'allspecies_highselect'
+                        newoutput.append(lines)
+                    elif record_id in ['allspecies_flexible', 'allspecies_core']:
+                        newoutput.append(lines)
+                    elif donor_species == record_id:
+                        genus, species = genus_species(donor_species)
+                        if species != donor_species:
+                            # avoid double recording SNPs
+                            # donor_species not high select set up
                             line_set = lines.split('\n')[0].split('\t')
-                            genus_highselect = init_highselect_empty(line_set)
-                            genus_highselect[0] = genus
-                            genus_highselect[1] = genus + '_highselect'
-                            Genus.setdefault(genus, genus_highselect)
-                        else:
-                            genus_highselect = Genus_notHS[genus]
-                            Genus_notHS[genus] = add_highselect(line_set, genus_highselect)
-                        line_set = lines.split('\n')[0].split('\t')
-                        if species not in Species_notHS:
-                            species_highselect = init_highselect_notHS(line_set)
-                            species_highselect[0] = species
-                            species_highselect[1] = species
-                            Species_notHS.setdefault(species, species_highselect)
+                            donor_species_highselect = init_highselect_notHS(line_set)
+                            Donor_species_notHS.setdefault(donor_species,
+                                                           donor_species_highselect)
                             line_set = lines.split('\n')[0].split('\t')
-                            species_highselect = init_highselect_empty(line_set)
-                            species_highselect[0] = species
-                            species_highselect[1] = species + '_highselect'
-                            Species.setdefault(species, species_highselect)
-                        else:
-                            species_highselect = Species_notHS[species]
-                            Species_notHS[species] = add_highselect(line_set, species_highselect)
+                            donor_species_highselect = init_highselect_empty(line_set)
+                            donor_species_highselect[1] = donor_species + '_highselect'
+                            Donor_species.setdefault(donor_species,
+                                                     donor_species_highselect)
+                            line_set = lines.split('\n')[0].split('\t')
+                            if genus not in Genus_notHS:
+                                genus_highselect = init_highselect_notHS(line_set)
+                                genus_highselect[0] = genus
+                                genus_highselect[1] = genus
+                                Genus_notHS.setdefault(genus, genus_highselect)
+                                line_set = lines.split('\n')[0].split('\t')
+                                genus_highselect = init_highselect_empty(line_set)
+                                genus_highselect[0] = genus
+                                genus_highselect[1] = genus + '_highselect'
+                                Genus.setdefault(genus, genus_highselect)
+                            else:
+                                genus_highselect = Genus_notHS[genus]
+                                Genus_notHS[genus] = add_highselect(line_set, genus_highselect)
+                            line_set = lines.split('\n')[0].split('\t')
+                            if species not in Species_notHS:
+                                species_highselect = init_highselect_notHS(line_set)
+                                species_highselect[0] = species
+                                species_highselect[1] = species
+                                Species_notHS.setdefault(species, species_highselect)
+                                line_set = lines.split('\n')[0].split('\t')
+                                species_highselect = init_highselect_empty(line_set)
+                                species_highselect[0] = species
+                                species_highselect[1] = species + '_highselect'
+                                Species.setdefault(species, species_highselect)
+                            else:
+                                species_highselect = Species_notHS[species]
+                                Species_notHS[species] = add_highselect(line_set, species_highselect)
+            except ValueError:
+                print(lines)
     # calculate NS for new HS genes
     for lines in open(input_summary, 'r'):
         line_set = lines.split('\n')[0].split('\t')
@@ -380,11 +388,15 @@ def add_new_selection(input_summary,High_select2):
                     elif (line_set[10] == 'observe_N_only' or float(line_set[10]) >= 0):
                         newoutput.append('\t'.join(line_set[:-1]) + '\tTrueacross\n')
                         if include_across_donor_PE:
-                            allspecies_highselect = add_highselect(line_set, allspecies_highselect)
+                            if len(PE_lineage) == 0 or donor_species in PE_lineage:
+                                allspecies_highselect = add_highselect(line_set, allspecies_highselect)
                             try:
-                                Donor_species[line_set[0]] = add_highselect(line_set, Donor_species[line_set[0]])
-                                Genus[genus] = add_highselect(line_set, Genus[genus])
-                                Species[species] = add_highselect(line_set, Species[species])
+                                if len(PE_lineage)==0 or donor_species in PE_lineage:
+                                    # significant
+                                    if line_set[0] in Donor_species:
+                                        Donor_species[line_set[0]] = add_highselect(line_set, Donor_species[line_set[0]])
+                                    Genus[genus] = add_highselect(line_set, Genus[genus])
+                                    Species[species] = add_highselect(line_set, Species[species])
                             except KeyError:
                                 print('no big contig in ',line_set[0])
                     else:
@@ -397,10 +409,11 @@ def add_new_selection(input_summary,High_select2):
                     pass
                     #print('not output %s' % ('\t'.join(line_set[0:5])))
         # original highly selected
-        elif Selected == 'True':
+        elif Selected == 'True' and (len(PE_lineage)==0 or donor_species in PE_lineage):
             newoutput.append(lines)
             allspecies_highselect = add_highselect(line_set, allspecies_highselect)
-            Donor_species[line_set[0]] = add_highselect(line_set, Donor_species[line_set[0]])
+            if line_set[0] in Donor_species:
+                Donor_species[line_set[0]] = add_highselect(line_set, Donor_species[line_set[0]])
             Genus[genus] = add_highselect(line_set, Genus[genus])
             Species[species] = add_highselect(line_set, Species[species])
         else:
@@ -483,7 +496,7 @@ def annotation(all_filter_gene_fasta_file,pre_cluster = ''):
                   output_dir_merge + '/summary',
                   os.path.split(all_filter_gene_fasta_file)[-1].replace('.faa', '.fna'))
     f1 = open(os.path.join(input_script_sub, 'prokka.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmdsprokka))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmdsprokka))
     f1.close()
     # run metacyc
     cutoff = 50
@@ -493,35 +506,35 @@ def annotation(all_filter_gene_fasta_file,pre_cluster = ''):
             "%s blastp --query %s --db %s.dmnd --out %s.metacyc.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
             %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
     f1 = open(os.path.join(input_script_sub, 'metacyc.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     # run eggnog
     cutoff = 0.01
     database = '/scratch/users/mit_alm/database/eggnog/xaa.hmm'
     cmds = ('%s --tblout %s.eggnog.1.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub, 'eggnog.1.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     database = '/scratch/users/mit_alm/database/eggnog/xab.hmm'
     cmds = ('%s --tblout %s.eggnog.2.txt --cpu 40 -E %s %s %s\n') % (
         args.hmm,
         all_filter_gene_fasta_file, cutoff, database, all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub, 'eggnog.2.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
     f1.close()
     database = '/scratch/users/mit_alm/database/eggnog/xac.hmm'
     cmds = ('%s --tblout %s.eggnog.3.txt --cpu 40 -E %s %s %s\n') % (
         args.hmm,
         all_filter_gene_fasta_file, cutoff, database, all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub, 'eggnog.3.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
     f1.close()
     # run kegg
     cutoff = 0.01
     database = '/scratch/users/mit_alm/database/kegg/kofam/profiles/prokaryote/prokaryote.hmm'
     cmds = ('%s --tblout %s.kegg.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub, 'kegg.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     if annotate_customized:
         # run customed database
@@ -555,7 +568,7 @@ def annotation(all_filter_gene_fasta_file,pre_cluster = ''):
         database = '/scratch/users/anniz44/scripts/database/NR.hmm'
         cmds += ('%s --tblout %s.NR.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
         f1 = open(os.path.join(input_script_sub, 'customed.sh'), 'w')
-        f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
+        f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
         f1.close()
     # all scripts
     f1 = open(os.path.join(input_script, 'allannotate.sh'), 'w')
@@ -584,7 +597,7 @@ def annotation_all(all_filter_gene_fasta_file,pre_cluster = ''):
                   output_dir_merge + '/summary',
                   os.path.split(all_filter_gene_fasta_file)[-1].replace('.faa', '.fna'))
     f1 = open(os.path.join(input_script_sub_all, 'prokka.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmdsprokka))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmdsprokka))
     f1.close()
     # run metacyc
     cutoff = 50
@@ -594,35 +607,35 @@ def annotation_all(all_filter_gene_fasta_file,pre_cluster = ''):
             "%s blastp --query %s --db %s.dmnd --out %s.metacyc.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
             %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
     f1 = open(os.path.join(input_script_sub_all, 'metacyc.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     # run eggnog
     cutoff = 0.01
     database = '/scratch/users/mit_alm/database/eggnog/xaa.hmm'
     cmds = ('%s --tblout %s.eggnog.1.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub_all, 'eggnog.1.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     database = '/scratch/users/mit_alm/database/eggnog/xab.hmm'
     cmds = ('%s --tblout %s.eggnog.2.txt --cpu 40 -E %s %s %s\n') % (
         args.hmm,
         all_filter_gene_fasta_file, cutoff, database, all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub_all, 'eggnog.2.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
     f1.close()
     database = '/scratch/users/mit_alm/database/eggnog/xac.hmm'
     cmds = ('%s --tblout %s.eggnog.3.txt --cpu 40 -E %s %s %s\n') % (
         args.hmm,
         all_filter_gene_fasta_file, cutoff, database, all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub_all, 'eggnog.3.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
     f1.close()
     # run kegg
     cutoff = 0.01
     database = '/scratch/users/mit_alm/database/kegg/kofam/profiles/prokaryote/prokaryote.hmm'
     cmds = ('%s --tblout %s.kegg.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub_all, 'kegg.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     # run customed database
     if annotate_customized:
@@ -656,7 +669,7 @@ def annotation_all(all_filter_gene_fasta_file,pre_cluster = ''):
         database = '/scratch/users/anniz44/scripts/database/NR.hmm'
         cmds += ('%s --tblout %s.NR.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
         f1 = open(os.path.join(input_script_sub_all, 'customed.sh'), 'w')
-        f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
+        f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
         f1.close()
     # all scripts
     f1 = open(os.path.join(input_script, 'allannotate_all.sh'), 'w')
@@ -690,7 +703,7 @@ def annotation_trunc(all_filter_gene_fasta_file,pre_cluster = ''):
                   output_dir_merge + '/summary',
                   os.path.split(all_filter_gene_fasta_file)[-1].replace('.faa', '.fna'))
     f1 = open(os.path.join(input_script_sub_trunc, 'prokka.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmdsprokka))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmdsprokka))
     f1.close()
     # run metacyc
     cutoff = 50
@@ -700,35 +713,35 @@ def annotation_trunc(all_filter_gene_fasta_file,pre_cluster = ''):
             "%s blastp --query %s --db %s.dmnd --out %s.metacyc.txt --id %s --query-cover %s --outfmt 6 --max-target-seqs 2 --evalue 1e-1 --threads 40\n"
             %(args.dm,all_filter_gene_fasta_file,database,all_filter_gene_fasta_file,cutoff,cutoff2))
     f1 = open(os.path.join(input_script_sub_trunc, 'metacyc.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     # run eggnog
     cutoff = 0.01
     database = '/scratch/users/mit_alm/database/eggnog/xaa.hmm'
     cmds = ('%s --tblout %s.eggnog.1.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub_trunc, 'eggnog.1.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     database = '/scratch/users/mit_alm/database/eggnog/xab.hmm'
     cmds = ('%s --tblout %s.eggnog.2.txt --cpu 40 -E %s %s %s\n') % (
         args.hmm,
         all_filter_gene_fasta_file, cutoff, database, all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub_trunc, 'eggnog.2.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
     f1.close()
     database = '/scratch/users/mit_alm/database/eggnog/xac.hmm'
     cmds = ('%s --tblout %s.eggnog.3.txt --cpu 40 -E %s %s %s\n') % (
         args.hmm,
         all_filter_gene_fasta_file, cutoff, database, all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub_trunc, 'eggnog.3.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s' % (cmds))
     f1.close()
     # run kegg
     cutoff = 0.01
     database = '/scratch/users/mit_alm/database/kegg/kofam/profiles/prokaryote/prokaryote.hmm'
     cmds = ('%s --tblout %s.kegg.txt --cpu 40 -E %s %s %s\n') %(args.hmm, all_filter_gene_fasta_file,cutoff,database,all_filter_gene_fasta_file)
     f1 = open(os.path.join(input_script_sub_trunc, 'kegg.sh'), 'w')
-    f1.write('#!/bin/bash\nsource ~/.bashrc\nexport LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
+    f1.write('#!/bin/bash\nsource ~/.bashrc\n#export LD_LIBRARY_PATH=/scratch/users/anniz44/bin/pro/lib/gsl-2.6:/scratch/users/anniz44/bin/pro/lib/glibc-2.14-build:/scratch/users/anniz44/bin/pro/lib/:/scratch/users/anniz44/bin/miniconda3/lib:$LD_LIBRARY_PATH\n%s'%(cmds))
     f1.close()
     # run customed database
     if annotate_customized:
@@ -789,8 +802,21 @@ def find_database(donor_species):
                 donor_species.split('.donor')[0],donor_species.split('.donor')[0], ref_filename))[0]
     return database
 
+def load_siglineages(lineagefile):
+    PE_lineage = []
+    for lines in open(lineagefile,'r'):
+        lines_set = lines.replace('\n', '').split('\t')
+        if not lines.startswith('X.donor_species'):
+            if lines_set[24] == 'True' :
+                PE_lineage.append(lines_set[0])
+    return PE_lineage
+
 
 ################################################## Definition ########################################################
+# load significant lineages
+PE_lineage = []
+if args.sig!='None':
+    PE_lineage = load_siglineages(args.sig)
 
 # extract highly selected sequences
 print('extract high selected genes')
@@ -956,10 +982,11 @@ Clusters_gene, High_select2_output,High_select2 = cluster_uc(all_fasta + '.uc')
 High_select2 = add_new_selection(input_summary,High_select2)
 
 # run clustering
-sum_gene(input_summary,High_select2,1)
-annotation(all_fasta_HS,'')
-#annotation(all_fasta_HS + '.High_select2.faa','')
-annotation_all(all_fasta,'')
-if args.trunc!= 'False':
-    annotation_trunc(all_fasta_trunc,'')
+if False:
+    sum_gene(input_summary,High_select2,1)
+    annotation(all_fasta_HS,'')
+    #annotation(all_fasta_HS + '.High_select2.faa','')
+    annotation_all(all_fasta,'')
+    if args.trunc!= 'False':
+        annotation_trunc(all_fasta_trunc,'')
 ################################################### END ########################################################

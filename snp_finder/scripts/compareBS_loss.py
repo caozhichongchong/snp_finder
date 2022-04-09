@@ -140,41 +140,40 @@ def find_mutations_on_BS(vcf_file,mut_strains,database):
     f1.write(''.join(BS_SNP_output))
     f1.close()
 
-donor_species = 'BL_D109'
-mut_strains = ['D109_BL_03','D109_BL_11','D109_BL_10','D109_BL_14','D109_BL_13','D109_BL_02']
-# gain
-database = '%s/%s/D109_BL_03.origin.fasta' % (output_folder, donor_species)
-#runmapping(donor_species,mut_strains,database)
-vcf_file = '%s/%s/D109_BL_03.loss.target.BS.raw.vcf' % (output_folder, donor_species)
-print(vcf_file)
-find_mutations_on_BS(vcf_file,mut_strains,database)
-# gain
-database = '%s/%s/D109_BL_11.origin.fasta' % (output_folder, donor_species)
-#runmapping(donor_species,mut_strains,database)
-vcf_file = '%s/%s/D109_BL_11.loss.target.BS.raw.vcf' % (output_folder, donor_species)
-print(vcf_file)
-find_mutations_on_BS(vcf_file,mut_strains,database)
-# gain
-database = '%s/%s/D109_BL_10.origin.fasta' % (output_folder, donor_species)
-#runmapping(donor_species,mut_strains,database)
-vcf_file = '%s/%s/D109_BL_10.loss.target.BS.raw.vcf' % (output_folder, donor_species)
-print(vcf_file)
-find_mutations_on_BS(vcf_file,mut_strains,database)
-# gain
-database = '%s/%s/D109_BL_14.origin.fasta' % (output_folder, donor_species)
-#runmapping(donor_species,mut_strains,database)
-vcf_file = '%s/%s/D109_BL_14.loss.target.BS.raw.vcf' % (output_folder, donor_species)
-print(vcf_file)
-find_mutations_on_BS(vcf_file,mut_strains,database)
-# gain
-database = '%s/%s/D109_BL_02.origin.fasta' % (output_folder, donor_species)
-#runmapping(donor_species,mut_strains,database)
-vcf_file = '%s/%s/D109_BL_02.loss.target.BS.raw.vcf' % (output_folder, donor_species)
-print(vcf_file)
-find_mutations_on_BS(vcf_file,mut_strains,database)
-
-if True:
+if False:
     # finished
+    donor_species = 'BL_D109'
+    mut_strains = ['D109_BL_03', 'D109_BL_11', 'D109_BL_10', 'D109_BL_14', 'D109_BL_13', 'D109_BL_02']
+    # gain
+    database = '%s/%s/D109_BL_03.origin.fasta' % (output_folder, donor_species)
+    # runmapping(donor_species,mut_strains,database)
+    vcf_file = '%s/%s/D109_BL_03.loss.target.BS.raw.vcf' % (output_folder, donor_species)
+    print(vcf_file)
+    find_mutations_on_BS(vcf_file, mut_strains, database)
+    # gain
+    database = '%s/%s/D109_BL_11.origin.fasta' % (output_folder, donor_species)
+    # runmapping(donor_species,mut_strains,database)
+    vcf_file = '%s/%s/D109_BL_11.loss.target.BS.raw.vcf' % (output_folder, donor_species)
+    print(vcf_file)
+    find_mutations_on_BS(vcf_file, mut_strains, database)
+    # gain
+    database = '%s/%s/D109_BL_10.origin.fasta' % (output_folder, donor_species)
+    # runmapping(donor_species,mut_strains,database)
+    vcf_file = '%s/%s/D109_BL_10.loss.target.BS.raw.vcf' % (output_folder, donor_species)
+    print(vcf_file)
+    find_mutations_on_BS(vcf_file, mut_strains, database)
+    # gain
+    database = '%s/%s/D109_BL_14.origin.fasta' % (output_folder, donor_species)
+    # runmapping(donor_species,mut_strains,database)
+    vcf_file = '%s/%s/D109_BL_14.loss.target.BS.raw.vcf' % (output_folder, donor_species)
+    print(vcf_file)
+    find_mutations_on_BS(vcf_file, mut_strains, database)
+    # gain
+    database = '%s/%s/D109_BL_02.origin.fasta' % (output_folder, donor_species)
+    # runmapping(donor_species,mut_strains,database)
+    vcf_file = '%s/%s/D109_BL_02.loss.target.BS.raw.vcf' % (output_folder, donor_species)
+    print(vcf_file)
+    find_mutations_on_BS(vcf_file, mut_strains, database)
     donor_species = 'BL_D109'
     mut_strains = ['D109_BL_03', 'D109_BL_11', 'D109_BL_10', 'D109_BL_14', 'D109_BL_13', 'D109_BL_02']
     # loss
@@ -223,8 +222,7 @@ if True:
     vcf_file = '%s/%s/am_BiPs_g0029.loss.target.BS.raw.vcf' % (output_folder, donor_species)
     print(vcf_file)
     find_mutations_on_BS(vcf_file,mut_strains,database)
-if False:
-    # not used
+if True:
     donor_species = 'BL_bj'
     mut_strains = ['bj_BL_g0035']
     # loss
@@ -232,10 +230,10 @@ if False:
     #runmapping(donor_species,mut_strains,database)
     vcf_file = '%s/%s/bj_BL_g0003.loss.target.BS.raw.vcf' % (output_folder, donor_species)
     print(vcf_file)
-    #find_mutations_on_BS(vcf_file,mut_strains,database)
+    find_mutations_on_BS(vcf_file,mut_strains,database)
     # gain
     database = '%s/%s/bj_BL_g0035.origin.fasta' % (output_folder, donor_species)
     #runmapping(donor_species,mut_strains,database)
     vcf_file = '%s/%s/bj_BL_g0035.loss.target.BS.raw.vcf' % (output_folder, donor_species)
     print(vcf_file)
-    #find_mutations_on_BS(vcf_file,mut_strains,database)
+    find_mutations_on_BS(vcf_file,mut_strains,database)

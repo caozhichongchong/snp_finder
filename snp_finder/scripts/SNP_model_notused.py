@@ -73,7 +73,7 @@ if 'human' in args.i:
     mut_set = [int(x) for x in [0,1e2,1e3,1e4,1e5,1e6,1e7]]
 if args.indel == 'False':
     indel_time = 0 # how many indels in a genome
-cause_SNP = False
+cause_SNP = True
 mapping_file = True
 #indel_orf = [-10,-7,-4, 4, 7, 10]
 indel_nonorf = list(range(2,17))
@@ -156,6 +156,21 @@ def transitions(REF,ALT):
 
 def contig_to_gene(CHR, POS):
     return []
+    all_genes = Mapping_loci.get(CHR,[])
+    Reverse_chr = 0
+    for a_gene in all_genes:
+        POS1, POS2, GENE = a_gene
+        if POS >= POS1 and POS <= POS2:
+            Ref_seq_chr = Ref_seq.get(GENE, 'None')
+            Gene_length = len(Ref_seq_chr)
+            if GENE in Reverse:  # reversed
+                POS_gene = Gene_length-(int(POS-POS1))
+                Reverse_chr = 1
+            else:
+                POS_gene = int(POS-POS1)+1
+            codon_start = POS_gene - 1 - int((POS_gene - 1) % 3)
+            return [GENE,POS_gene,codon_start,Ref_seq_chr,Reverse_chr]
+    return []
 
 def loaddatabase(database_aa,database):
     # load database seq
@@ -163,6 +178,7 @@ def loaddatabase(database_aa,database):
     reference_database = os.path.split(database_aa)[-1]
     print('reference database_aa set as %s' % (reference_database))
     Ref_seq = dict()
+    Reverse = []
     Input_seq = dict()
     Input_id = []
     for record in SeqIO.parse(database, 'fasta'):
@@ -176,7 +192,11 @@ def loaddatabase(database_aa,database):
         record_id = str(record.id)
         record_seq = list(str(record.seq))
         Ref_seq.setdefault(record_id, record_seq)
-    return [Ref_seq,Length,Input_seq,Input_id]
+        description = str(record.description).replace(' ', '').split('#')
+        contig = '_'.join(record_id.split('_')[0:-1])
+        if float(description[3]) == -1.0:  # reverse str
+            Reverse.append(record_id)
+    return [Ref_seq,Length,Reverse,Input_seq,Input_id]
 
 def modelindel(seq,Chr,indel_set):
     SNP_output = []
@@ -266,7 +286,7 @@ def run_vcf_WGS(files,files2,database,tempbamoutput):
             min(40, args.t), database, files, files2,  min(40, args.t),
             tempbamoutput,  min(40, args.t), tempbamoutput, tempbamoutput, min(40, args.t),
             tempbamoutput)
-        cmds += 'rm -r %s.bam\n' % (tempbamoutput)
+        cmds += 'rm -r %s.sam %s.bam %s.bam.bai\n' % (tempbamoutput, tempbamoutput, tempbamoutput)
     return [cmds, '%s.sorted.bam' % (tempbamoutput)]
 
 def merge_sample(database,vcfoutput,allsam):
@@ -287,7 +307,7 @@ def merge_sample(database,vcfoutput,allsam):
     except FileNotFoundError:
         cmds += 'bcftools view -H -v indels -i \'QUAL>=20 && MIN(DP)>=3\' %s.raw.vcf > %s.flt.indel.vcf \n' % (
             vcfoutput, vcfoutput)
-    cmds += 'rm %s\n'%(' '.join([x+'*' for x in allsam]))
+    cmds += 'rm %s\n'%(' '.join(allsam))
     if '.0.SNP.fasta.bowtie' not in vcfoutput:
         cmds += 'rm %s.raw.vcf\n' % (vcfoutput)
     return cmds
@@ -370,7 +390,7 @@ for database in allgenome:
         open(database_file,'r')
     except IOError:
         os.system('prodigal -q -i %s -d %s'%(database,database_file))
-    Ref_seq, Length, Input_seq, Input_id = loaddatabase(database_file,database)
+    Ref_seq, Length, Reverse, Input_seq, Input_id = loaddatabase(database_file,database)
     # find fastq
     fastq_file = '%s/%s'%(genome_root,database_name.replace(genome_name,fastq_name))
     fastq_file2 = '%s/%s'%(genome_root,database_name.replace(genome_name,fastq_name2))

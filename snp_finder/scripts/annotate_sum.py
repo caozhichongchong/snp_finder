@@ -21,7 +21,7 @@ database_metacyc = '/scratch/users/mit_alm/database/metacyc/genes.col'
 database_eggnog = '/scratch/users/mit_alm/database/eggnog/2_annotations.tsv'
 database_eggnog2 = '/scratch/users/mit_alm/database/eggnog/COG_catogary.txt'
 database_kegg = '/scratch/users/anniz44/scripts/database/Kegg/ko_formated'
-all_fasta_set = glob.glob(os.path.join(output_dir_merge + '/summary', '*.cluster.aa'))
+all_fasta_set = glob.glob(os.path.join(output_dir_merge , '*.cluster.aa'))
 
 # function annotation
 def best_hit(Blast_output,small = 0):
@@ -113,7 +113,7 @@ def annotate_eggnog(blast_search):
                     DB_name[db_name][0] = function_name
                     DB_name[db_name][1] = annotation_fun
                     for annotation_catogary_sub in annotation_catogary:
-                        DB_name_2[db_name].append('%s\t%s\t%s'%(function_name,annotation_fun,annotation_catogary_sub))
+                        DB_name_2[db_name].append('%s%s\t%s'%(function_name,annotation_fun,annotation_catogary_sub))
     best_hit(Blast_output, 1)
     return [Blast_output,DB_name,DB_name_2]
 
@@ -419,20 +419,21 @@ def sum_annotation(Blast_output1,DB_name1,Blast_output2,DB_name2,Blast_output3,D
 
 for all_fasta in all_fasta_set:
     all_fasta_folder, all_fasta_file = os.path.split(all_fasta)
-    try:
-        database_prokka = glob.glob(os.path.join(all_fasta_folder, 'prokka_%s/*.tsv' % (all_fasta_file)))[0]
-        database_prokka_fasta = glob.glob(os.path.join(all_fasta_folder, 'prokka_%s/*.faa' % (all_fasta_file)))[0]
-        Blast_output4, DB_name4 = annotate_prokka(all_fasta)
-    except IndexError:
-        Blast_output4 = dict()
-        DB_name4 = dict()
+    if False:
+        try:
+            database_prokka = glob.glob(os.path.join(all_fasta_folder, 'prokka_%s/*.tsv' % (all_fasta_file)))[0]
+            database_prokka_fasta = glob.glob(os.path.join(all_fasta_folder, 'prokka_%s/*.faa' % (all_fasta_file)))[0]
+            Blast_output4, DB_name4 = annotate_prokka(all_fasta)
+        except IndexError:
+            Blast_output4 = dict()
+            DB_name4 = dict()
     # set up gene annotation and clustering
     Blast_output1, DB_name1, DB_name1_2 = annotate_kegg(all_fasta + '.kegg.txt')
-    Blast_output2, DB_name2 = annotate_metacyc(all_fasta + '.metacyc.txt')
+    #Blast_output2, DB_name2 = annotate_metacyc(all_fasta + '.metacyc.txt')
     Blast_output3, DB_name3, DB_name3_2 = annotate_eggnog(glob.glob(all_fasta + '.eggnog.*.txt'))
     # sum up
     Clusters_gene = cluster_uc(all_fasta.replace('.cluster.aa','.uc'))
     sum_kegg_eggnog(Blast_output1,DB_name1_2,Blast_output3,DB_name3_2,Clusters_gene)
-    sum_annotation(Blast_output1, DB_name1, Blast_output2, DB_name2, Blast_output3, DB_name3, Blast_output4, DB_name4,
-                   Clusters_gene)
+    #sum_annotation(Blast_output1, DB_name1, Blast_output2, DB_name2, Blast_output3, DB_name3, Blast_output4, DB_name4,
+                   #Clusters_gene)
 ################################################### END ########################################################

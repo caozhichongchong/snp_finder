@@ -33,11 +33,10 @@ os.system('mkdir %s'%(output_dir))
 # set up cutoff
 # good mapping
 Major_alt_freq_cutoff = 0.8 # major alt freq in a sample
-Sample_depth_cutoff = 3 # both forward and reverse reads cutoff in a sample
+Sample_depth_cutoff = 5 # both forward and reverse reads cutoff in a sample
 
 # reasonable curation
 Major_alt_freq_cutoff2 = 0.8 # major alt freq in a sample
-Sample_depth_cutoff2 = Sample_depth_cutoff # both forward and reverse reads cutoff in a sample
 
 Allels = dict()
 Allels['A']=0
@@ -97,13 +96,11 @@ def SNP_check(lines,donor_species,vcf_file_list):
             if REF != Major_ALT[0]:
                 # wrong assembly
                 temp_report_line[0] = 'F' # F: not good assembly
-                if total_sub_depth_forward >= Sample_depth_cutoff2 and \
-                        total_sub_depth_reverse >= Sample_depth_cutoff2 and \
+                if total_sub_depth_forward + total_sub_depth_reverse >= Sample_depth_cutoff *2 and\
                         MLF >= Major_alt_freq_cutoff2:
                     # can be curated
                     need_curation = 'T'  # T: need curation
-            if total_sub_depth_forward < Sample_depth_cutoff or \
-                    total_sub_depth_reverse < Sample_depth_cutoff or \
+            if total_sub_depth_forward + total_sub_depth_reverse< Sample_depth_cutoff*2 or \
                     MLF < Major_alt_freq_cutoff:
                 # unqualified mapping
                 temp_report_line[1] = 'F' # F: bad mapping
@@ -122,7 +119,7 @@ vcf_file_report = []
 vcf_file_list = []
 vcf_file_report.append('donor_species\tCHR\tPOS\tREF\tALT\tAssembly\tMapping_quality\tNeed_curation\tMajor_ALT\tMajor_ALT_frq\tDepth_F\tDepth_R\n')
 for vcf_file in all_vcf_file:
-    donor_species = os.path.split(vcf_file)[-1].split(fastq_name)[0]
+    donor_species = os.path.split(vcf_file)[-1].split(fastq_name)[0].replace('.bowtie','')
     for lines in open(vcf_file, 'r'):
         if not lines.startswith("#"):
             vcf_file_report.append(SNP_check(lines,donor_species,vcf_file_list))

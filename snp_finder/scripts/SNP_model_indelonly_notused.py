@@ -294,7 +294,7 @@ def modelSNPall(Input_seq, Input_id, Length,num_mut,database_name):
     return output_fasta
 
 def run_mapper(files,database,tempbamoutput):
-    cmds = 'time java -jar %s/mapper1.5.jar --reference %s --queries %s --out-vcf %s.vcf\n' % (args.s,database, files, tempbamoutput)
+    cmds = 'time java -jar %s/mapper1.25.jar --reference %s --queries %s --out-vcf %s.vcf\n' % (args.s,database, files, tempbamoutput)
     return cmds
 
 # load database
