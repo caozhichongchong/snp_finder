@@ -47,18 +47,12 @@ output_dir = args.o + '/SNP_model'
 genome_name = args.fa
 fastq_name=args.fq
 fastq_name2=args.fq.replace('1','2')
-cause_SNP = False
-mapping_file = True
-time_evaluation = False
-if time_evaluation:
-    input_script_sub = '%s/SNP_model'%(input_script)
-else:
-    input_script_sub = '%s/SNP_model_onetime'%(input_script)
+input_script_sub = '%s/SNP_model'%(input_script)
 if args.indel == 'False':
-    output_dir += '_noindel'
-    input_script_sub += '_noindel'
+    output_dir = args.o + '/SNP_model_noindel'
+    input_script_sub = '%s/SNP_model_noindel' % (input_script)
 
-latest_mapper = glob.glob('%s/mapper1.*.jar'%(args.s))[0]
+latestmapper = glob.glob('%s/mapper1.*.jar'%(args.s))[0]
 # Set up A T G C
 Allels = dict()
 Allels['A']=0
@@ -74,13 +68,15 @@ purines=['A','G']
 pyrimidines=['C','T']
 complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
 # Set up mutation rate
-mut_set = [0,5,10,50,100,1000,5000,10000,50000,100000,200000]
-#mut_set = [0,5,10,50,100,1000,5000,10000,50000,100000,200000,300000,400000,500000]
+#mut_set = [0,5,10,50,100,1000,5000,10000,50000,100000,500000]
+mut_set = [200000,300000,400000]
 indel_time = 100 # how many indels in a genome
 if 'human' in args.i:
     mut_set = [int(x) for x in [0,1e2,1e3,1e4,1e5,1e6,1e7]]
 if args.indel == 'False':
     indel_time = 0 # how many indels in a genome
+cause_SNP = True
+mapping_file = True
 #indel_orf = [-10,-7,-4, 4, 7, 10]
 indel_nonorf = list(range(2,17))
 indel_nonorf.extend(list(range(-17,-2)))
@@ -105,7 +101,7 @@ try:
 except IOError:
     pass
 
-os.system('rm -r %s'%(input_script_sub))
+#os.system('rm -r %s'%(input_script_sub))
 try:
     os.mkdir(input_script_sub)
 except IOError:
@@ -272,20 +268,28 @@ def run_vcf_WGS(files,files2,database,tempbamoutput):
             min(40, args.t), database, files, files2,  min(40, args.t),
             tempbamoutput,  min(40, args.t), tempbamoutput, tempbamoutput, min(40, args.t),
             tempbamoutput)
-        cmds += 'rm -r %s.sam %s.bam %s.bam.bai\n' % (tempbamoutput, tempbamoutput, tempbamoutput)
+        cmds += 'rm -r %s.bam\n' % (tempbamoutput)
     return [cmds, '%s.sorted.bam' % (tempbamoutput)]
 
 def merge_sample(database,vcfoutput,allsam):
     cmds = ''
-    cmds += 'bcftools mpileup --ff UNMAP,QCFAIL,SECONDARY --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -Ou -d3000 -A -f  %s %s | bcftools call -Ov -A -M -c --threads %s > %s.raw.vcf\n' % (
+    try:
+        f1 = open('%s.raw.vcf' % (vcfoutput), 'r')
+    except FileNotFoundError:
+        cmds += 'bcftools mpileup --ff UNMAP,QCFAIL,SECONDARY --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -Ou -d3000 -A -f  %s %s | bcftools call -Ov -A -M -c --threads %s > %s.raw.vcf\n' % (
              min(40, args.t), database,
             ' '.join(allsam), min(40, args.t), vcfoutput)
-    if not time_evaluation:
+    try:
+        f1 = open('%s.flt.snp.vcf' % (vcfoutput))
+    except FileNotFoundError:
         cmds += 'bcftools view -H -v snps -i \'QUAL>=20 && MIN(DP)>=3\' %s.raw.vcf > %s.flt.snp.vcf \n' % (
-                vcfoutput, vcfoutput)
+            vcfoutput, vcfoutput)
+    try:
+        f1 = open('%s.flt.indel.vcf' % (vcfoutput))
+    except FileNotFoundError:
         cmds += 'bcftools view -H -v indels -i \'QUAL>=20 && MIN(DP)>=3\' %s.raw.vcf > %s.flt.indel.vcf \n' % (
-                vcfoutput, vcfoutput)
-    cmds += 'rm %s\n'%(' '.join(allsam))
+            vcfoutput, vcfoutput)
+    cmds += 'rm %s\n'%(' '.join([x+'*' for x in allsam]))
     if '.0.SNP.fasta.bowtie' not in vcfoutput:
         cmds += 'rm %s.raw.vcf\n' % (vcfoutput)
     return cmds
@@ -351,15 +355,12 @@ def modelSNPall(Input_seq, Input_id, Length,num_mut,database_name):
     return output_fasta
 
 def run_mapper(files,files2,database,tempbamoutput):
-    max_penalty = 0.1 # default
-    if '200000' in database:
-        max_penalty = 0.2
     if 'human' in args.i:
-        cmds = '/usr/bin/time -v java -Xms850g -Xmx850g -jar %s  --max-penalty %s --num-threads 40 --reference %s --queries %s  --queries %s --out-vcf %s.vcf\n' % (
-            latest_mapper, max_penalty, database, files, files2, tempbamoutput)
+        cmds = '/usr/bin/time -v java -Xms850g -Xmx850g -jar %s --num-threads 40 --reference %s --queries %s  --queries %s --out-vcf %s.vcf\n' % (
+            latestmapper, database, files, files2, tempbamoutput)
     else:
-        cmds = '/usr/bin/time -v java -Xms10g -Xmx10g -jar %s --max-penalty %s --num-threads 40 --reference %s --queries %s  --queries %s --out-vcf %s.vcf\n' % (
-            latest_mapper, max_penalty, database, files, files2, tempbamoutput)
+        cmds = '/usr/bin/time -v java -Xms220g -Xmx220g -jar %s --num-threads 40 --reference %s --queries %s  --queries %s --out-vcf %s.vcf\n' % (
+            latestmapper, database, files, files2, tempbamoutput)
     return cmds
 
 # load database
@@ -437,9 +438,9 @@ for database in allgenome:
             # run bowtie and mapper on the same node
             cmds = run_mapper(fastq_file, fastq_file2, mutated_genome, os.path.join(output_dir + '/merge',
                                                                                     mutated_genome_filename + '.mapper1'))
-            cmds += '/usr/bin/time -v #sh %s\n'%(os.path.join(input_script_sub, '%s.bowtie.vcf.sh' % (mutated_genome_filename)))
-            cmds += '/usr/bin/time -v #sh %s\n' % (os.path.join(input_script_sub, '%s.minimap.vcf.sh' % (mutated_genome_filename)))
-            cmds += '/usr/bin/time -v #sh %s\n' % (os.path.join(input_script_sub, '%s.bwa.vcf.sh' % (mutated_genome_filename)))
+            cmds += '/usr/bin/time -v sh %s\n'%(os.path.join(input_script_sub, '%s.bowtie.vcf.sh' % (mutated_genome_filename)))
+            cmds += '/usr/bin/time -v sh %s\n' % (os.path.join(input_script_sub, '%s.minimap.vcf.sh' % (mutated_genome_filename)))
+            cmds += '/usr/bin/time -v sh %s\n' % (os.path.join(input_script_sub, '%s.bwa.vcf.sh' % (mutated_genome_filename)))
             f1 = open(os.path.join(input_script_sub, '%s.mapper1.vcf.sh' % (mutated_genome_filename)), 'w')
             f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
             f1.close()
@@ -449,10 +450,7 @@ for database in allgenome:
 
 f1 = open(os.path.join(input_script, 'allsnpmodel.sh'), 'w')
 f1.write('#!/bin/bash\nsource ~/.bashrc\n')
-total_test = 1
-if time_evaluation:
-    total_test = 10 # run each pipeline 10 times
-for m in range(0,total_test):
+for m in range(0,10):
     for sub_scripts in glob.glob(os.path.join(input_script_sub, '*.mapper1.vcf.sh')):
         os.system('cp %s %s%s'%(sub_scripts,sub_scripts,m))
         if 'human' in args.i:

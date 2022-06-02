@@ -27,6 +27,10 @@ if [ "$length" == "" ]; then
   usage
 fi
 
-endIndex="$((startIndex + length))"
+endIndex="$((startIndex + length - 1))"
 
+#for i in $(seq 1 $startIndex); do
+#  echo -n " "
+#done
 grep "$contigName" -A 1 "$filepath" | tail -n 1 | head -c "$endIndex" | tail -c "$length"
+echo

@@ -30,7 +30,7 @@ args = parser.parse_args()
 # set up path
 output_dir = args.i
 ref_dir = args.ref
-mapper_checkFP = True
+
 # function
 def load_vcf_ref(vcf_file):
     vcf_input = set()
@@ -39,7 +39,7 @@ def load_vcf_ref(vcf_file):
             lines_set = lines.split('\n')[0].split('\t')
             CHR = lines_set[0]
             POS = lines_set[1]
-            CHRPOS = '%s\t%s\t'%(CHR,POS)
+            CHRPOS = '%s\t%s'%(CHR,POS)
             vcf_input.add(CHRPOS)
     return vcf_input
 
@@ -49,15 +49,15 @@ def load_vcf(vcf_file):
             lines_set = lines.split('\n')[0].split('\t')
             CHR = lines_set[0]
             POS = lines_set[1]
-            vcf_input.add('%s\t%s\t'%(CHR,POS))
+            vcf_input.add('%s\t%s'%(CHR,POS))
     return vcf_input
 
-def compare_vcf(vcf,print_vcf_set=False):
+def compare_vcf(vcf):
     summary_file_output = []
     print(datetime.now(), 'started processing', vcf)
     vcf_input1 = load_vcf(vcf)
-    FN_diff = compare_vcf_detail(vcf, vcf_inputref, vcf_input1,False) # vcf diff in ref not in 1, FN
-    FP_diff = compare_vcf_detail(vcf, vcf_input1, vcf_inputref,print_vcf_set) # vcf diff in 1 not in ref, FP
+    FN_diff = compare_vcf_detail(vcf_inputref, vcf_input1) # vcf diff in ref not in 1, FN
+    FP_diff = compare_vcf_detail(vcf_input1, vcf_inputref) # vcf diff in 1 not in ref, FP
     summary_file_output.append('%s\t%s\t%s\t%s\n'%(
         os.path.split(vcf)[-1],
         FP_diff,
@@ -68,24 +68,9 @@ def compare_vcf(vcf,print_vcf_set=False):
     f1.close()
     print(datetime.now(), 'finished processing', vcf)
 
-def compare_vcf_detail(vcf, vcf_input1, vcf_input2, print_vcf_set):
+def compare_vcf_detail(vcf_input1, vcf_input2):
     # CHRPOS in 1 not in 2
     vcf_set = [CHRPOS for CHRPOS in vcf_input1 if CHRPOS not in vcf_input2]
-    if print_vcf_set:
-        # print max 100 FPs
-        temp_output = os.path.join(output_dir, 'grep.temp.txt')
-        f1 = open(temp_output, 'w')
-        f1.write('\n'.join(vcf_set[:min(100, len(vcf_set) - 1)]))
-        f1.close()
-        os.system('grep -T -f %s %s --no-group-separator > %s' % (
-            temp_output,
-            vcf,
-            vcf + '.temp'))
-        os.system('sort -k3 -n %s | sort -k2 > %s' %
-                  (vcf + '.temp', vcf + '.' + 'FP')
-                  )
-        os.system('rm -rf %s' % (vcf + '.temp'))
-        os.system('rm -rf %s' % (temp_output))
     return len(vcf_set)
 
 # ref
@@ -120,6 +105,6 @@ for vcf_ref_file in vcf_ref:
         pass
     try:
         # mapper
-        compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.mapper1.vcf.final.vcf')[0], mapper_checkFP)
+        compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.mapper1.vcf.final.vcf')[0])
     except IndexError:
         pass

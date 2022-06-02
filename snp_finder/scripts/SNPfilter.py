@@ -19,24 +19,17 @@ optional.add_argument("-cluster",
 args = parser.parse_args()
 ################################################### Set up ########################################################
 # Set up cutoff
-min_qual_for_call = 41.9 #Remove sample*candidate that has lower than this quality
+min_qual_for_call = 40 #Remove sample*candidate that has lower than this quality
 min_maf_for_call = .9 #Remove sample*candidate
 min_cov = 3 # at least 3 reads mapped to POS
 if 'human' in args.i:
-    min_cov = 5
-    # -q 20 -Q 20
-    ## Remove SNPs within 5 bases of an INDEL
-    ## light filter for max missing 50%, minimum depth of 5 (per genotype), bi-allelic calls, minimum quality phred 20
-    #--max-missing <float> Exclude sites on the basis of the proportion of missing data (defined to be between 0 and 1, where 0 allows sites that are completely missing and 1 indicates no missing data allowed).
-    ## Remove individuals missing 30% data in conjunction with the light filter
-    ## Apply stringent filter:
-    ## Exclude individuals missing 30% of data and loci that are missing 20% of data
-    ## some filters are redundant in case steps are run out of order
-    ## apply minimum genotypic depth of 8
-    ## Apply minor allele frequency filter for a population
+    min_cov = 10
 bowtievcfsuffix = '.flt.snp.vcf'
 mappervcfsuffix = '.mapper1.vcf'
 compare_to_baseline = False
+Middle_only = False
+if 'noindel' in args.i:
+    compare_to_baseline = True
 ################################################### Function ########################################################
 def filter_snp(depthall,depthsnp):
     MAF = depthsnp/depthall
@@ -104,7 +97,7 @@ def load_bowtie(bowtievcf):
 
 def load_mapper(mappervcf):
     try:
-        f1 = open(mappervcf + '.final.txt', 'r')
+        f1 = open(mappervcf + '.final2.txt', 'r')
     except IOError:
         # grep all snps
         os.system('grep \';\' %s > %s.snp' % (mappervcf, mappervcf))
@@ -134,20 +127,26 @@ def load_mapper(mappervcf):
                     if baseline_chrpos == set() or '%s\t%s' % (CHR, POS) not in baseline_chrpos:
                         withsnp = False
                         DP = float(DP)
-                        middleDP = [x for x in middleDP.split(';')]
-                        endDP = [x for x in endDP.split(';')]
-                        for i in range(0,len(ALT)):
-                            # each potential ALT
-                            if ALT[i] != '-':
-                                # not indel
-                                # using both middle and end depth
-                                depthsnp = sum([float(x) for x in middleDP[i+1].split(',')]) + sum([float(x) for x in endDP[i+1].split(',')]) # skip REF
-                                if filter_snp(DP, depthsnp):
-                                    # a qualified snp
-                                    withsnp = True
-                                    snpoutput.append('%s\t%s\t%s\t%s\t%s\t%s\n'%(CHR,POS,REF,ALT[i],DP,depthsnp))
-                        if withsnp:
-                            vcfoutput.append(lines)
+                        middleDP = [x.split(',') for x in middleDP.split(';')]
+                        endDP = [x.split(',') for x in endDP.split(';')]
+                        if Middle_only:
+                            DP = sum([float(x[0]) + float(x[1]) for x in middleDP])
+                        if DP > 0:
+                            for i in range(0,len(ALT)):
+                                # each potential ALT
+                                if ALT[i] != '-':
+                                    # not indel
+                                    # using both middle and end depth
+                                    if Middle_only:
+                                        depthsnp = sum([float(x) for x in middleDP[i + 1]]) # skip REF
+                                    else:
+                                        depthsnp = sum([float(x) for x in middleDP[i + 1]]) + sum([float(x) for x in endDP[i + 1]]) # skip REF
+                                    if filter_snp(DP, depthsnp):
+                                        # a qualified snp
+                                        withsnp = True
+                                        snpoutput.append('%s\t%s\t%s\t%s\t%s\t%s\n'%(CHR,POS,REF,ALT[i],DP,depthsnp))
+                            if withsnp:
+                                vcfoutput.append(lines)
             if snpline % 1000000 == 0:
                 print(datetime.now(), 'processed %s lines' % (snpline))
         # output qualified snps

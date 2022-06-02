@@ -5,7 +5,10 @@ cmds = 'sh allsnpmodel.sh'
 cmds = 'python SNPfilter_WGS_singlesample.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model_indelold/merge -vcf .flt.snp.vcf -s . -smp /scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/SNP_model_indelold/SNP_model_10G/ -cluster am_BaSa_g0015.fasta'
 cmds = 'python SNP_model_compare.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model/merge/ -ref /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model/data/'
 cmds = 'python Indelfilter.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model/merge/ -ref /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model_indelold/data/'
-
+cmds = 'python SNP_compare_mappertobowtienew.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model/merge/'
+cmds = 'python SNP_compare_mappertobowtiesumnew.py -i /scratch/users/anniz44/genomes/donor_species/SNP_curate/SNP_model/SNP_model/SNP_compare/SNP_compare_output/'
+# notebook mappervsbowtie.py
+cmds = 'python timesum_parallel.py'
 # summarize bowtie and mapper time and reads alignment rate -> timecovsum.py
 cmds = 'python timecovsum.py'
 # human diet
