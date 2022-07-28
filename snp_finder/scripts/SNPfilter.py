@@ -24,8 +24,8 @@ min_maf_for_call = .9 #Remove sample*candidate
 min_cov = 3 # at least 3 reads mapped to POS
 if 'human' in args.i:
     min_cov = 10
-bowtievcfsuffix = '.flt.snp.vcf'
-mappervcfsuffix = '.mapper1.vcf'
+bowtievcfsuffix = 'flt.snp.vcf'#'.flt.snp.vcf'
+mappervcfsuffix = 'mapper1.vcf'
 compare_to_baseline = False
 Middle_only = False
 if 'noindel' in args.i:
@@ -61,6 +61,20 @@ def load_bowtie(bowtievcf):
                     baseline_set.setdefault(baselinegenome + tool,load_baselinesnp(baselinegenome))
                 baseline_chrpos = baseline_set[baselinegenome + tool]
                 print('%s finished loading baseline %s' % (datetime.now(), baselinegenome))
+        # load depth of qualified indel to support snps on POSs of that indel
+        indel_file = bowtievcf.replace('.flt.snp.vcf','.flt.indel.vcf')
+        indel_depth = dict()
+        print('%s start loading indel depth %s' % (datetime.now(), indel_file))
+        for lines in open(indel_file, 'r'):
+            lines_set = lines.split('\n')[0].split('\t')
+            CHR, POS, USELESS, REF, ALT, QUAL = lines_set[:6]
+            if float(QUAL) >= min_qual_for_call:
+                POS = int(POS)
+                DPset = [float(x) for x in lines_set[9].split(':')[-1].replace('\n', '').split(',')]
+                DP = sum(DPset)
+                for POSsub in range(POS, POS + len(REF)):
+                    indel_depth.setdefault('%s\t%s'%(CHR,POSsub),DP)
+        print('%s finished loading indel depth %s' % (datetime.now(), indel_file))
         # grep all snps
         vcfoutput = []
         snpoutput = ['CHR\tPOS\tREF\tALT\tDPall\tDPsnp\n']
@@ -75,7 +89,7 @@ def load_bowtie(bowtievcf):
                 if baseline_chrpos== set() or '%s\t%s'%(CHR,POS) not in baseline_chrpos:
                     withsnp = False
                     DPset = [float(x) for x in lines_set[9].split(':')[-1].replace('\n', '').split(',')]
-                    DP = sum(DPset)
+                    DP = sum(DPset) + indel_depth.get('%s\t%s'%(CHR,POS),0)
                     for i in range(0, len(ALT)):
                         # each potential ALT
                         depthsnp = DPset[i+1]# skip REF

@@ -123,3 +123,13 @@ for vcf_ref_file in vcf_ref:
         compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.mapper1.vcf.final.vcf')[0], mapper_checkFP)
     except IndexError:
         pass
+    try:
+        # mapper sam
+        compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.mapper1sam.flt.snp.vcf.final.vcf')[0], mapper_checkFP)
+    except IndexError:
+        pass
+    try:
+        # mapper sam
+        compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.kmermapper1.vcf.final.vcf')[0], mapper_checkFP)
+    except IndexError:
+        pass

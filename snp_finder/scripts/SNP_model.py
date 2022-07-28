@@ -31,6 +31,10 @@ optional.add_argument("-o",
                       help="a folder to store all output",
                       type=str, default='snp_output/',
                       metavar='snp_output/')
+optional.add_argument("-rmhm",
+                      help="remove homologous regions reported in genome_removeduplicate.py output",
+                      type=str, default='False',
+                      metavar='.duplicate_50kmer.txt')
 optional.add_argument('-t',
                       help="Optional: set the thread number assigned for running XXX (default 40)",
                       metavar="1 or more", action='store', default=40, type=int)
@@ -47,9 +51,10 @@ output_dir = args.o + '/SNP_model'
 genome_name = args.fa
 fastq_name=args.fq
 fastq_name2=args.fq.replace('1','2')
-cause_SNP = False
+cause_SNP = True
 mapping_file = True
 time_evaluation = False
+homologous_region_length = 50
 if time_evaluation:
     input_script_sub = '%s/SNP_model'%(input_script)
 else:
@@ -58,7 +63,7 @@ if args.indel == 'False':
     output_dir += '_noindel'
     input_script_sub += '_noindel'
 
-latest_mapper = glob.glob('%s/mapper1.*.jar'%(args.s))[0]
+latest_mapper = glob.glob('%s/mapper-1*.jar'%(args.s))[0]
 # Set up A T G C
 Allels = dict()
 Allels['A']=0
@@ -184,6 +189,17 @@ def loaddatabase(database_aa,database):
         Ref_seq.setdefault(record_id, record_seq)
     return [Ref_seq,Length,Input_seq,Input_id]
 
+def load_homologous_regions(homologous_file):
+    homologous_regions = dict()
+    for lines in open(homologous_file, 'r'):
+        lines_set = lines.split('\n')[0].split('\t')
+        CHR, POS, No_match = lines_set
+        homologous_regions.setdefault(CHR,set())
+        POS = int(POS)
+        for i in range(POS, POS + homologous_region_length + 1):
+            homologous_regions[CHR].add(i)
+    return homologous_regions
+
 def modelindel(seq,Chr,indel_set):
     SNP_output = []
     indel_set.sort()
@@ -221,12 +237,14 @@ def modelSNP(seq,Chr,num_mut_chr,num_indel_chr):
     # indel modelling
     indel_output = []
     seq = list(seq)
+    homologous_regions_chr = homologous_regions.get(Chr, set())
     if num_indel_chr > 0:
-        candidate_position = [i for i in range(0, total_length) if seq[i] not in ['-','N']]
+        candidate_position = [i for i in range(0, total_length) if seq[i] not in ['-','N'] and i not in homologous_regions_chr]
         indel_set = random.sample(candidate_position, k=num_indel_chr)
         seq, indel_output = modelindel(seq,Chr,indel_set)
     total_length = len(seq)
     # SNP modelling
+    # if add indels, need re-adjust homologous_regions_chr!
     candidate_position = [i for i in range(0, total_length) if seq[i] not in ['-', 'N']]
     num_mut_chr = min(num_mut_chr,len(candidate_position))
     position_set = random.sample(candidate_position, k=num_mut_chr)
@@ -361,6 +379,11 @@ def run_mapper(files,files2,database,tempbamoutput):
         cmds = '/usr/bin/time -v java -Xms10g -Xmx10g -jar %s --max-penalty %s --num-threads 40 --reference %s --queries %s  --queries %s --out-vcf %s.vcf\n' % (
             latest_mapper, max_penalty, database, files, files2, tempbamoutput)
     return cmds
+
+# load homologous regions
+homologous_regions = dict()
+if args.rmhm != 'False':
+    homologous_regions = load_homologous_regions(args.rmhm)
 
 # load database
 allgenome = glob.glob('%s/*%s'%(genome_root,genome_name))
