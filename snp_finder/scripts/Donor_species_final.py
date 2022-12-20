@@ -41,7 +41,8 @@ vcf_folder = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge'
 vcf_format = '.filtered.vcf'
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
 # use clusters! SNPfilter_WGS_all.py
-print('python SNPfilter_WGS.py -i %s -vcf %s -s %s'%(vcf_folder, vcf_format,input_script))
+print('python SNP_merge.py')
+#print('python SNPfilter_WGS.py -i %s -vcf %s -s %s'%(vcf_folder, vcf_format,input_script))
 # check error
 #'ls -lh *.err | grep -v 'K''
 #'ls -lh *.all.raw.vcf | grep -v 'G' | grep -v 'M'  '
@@ -57,7 +58,7 @@ coassembly_file = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge
 cutoff_file = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/total_SNP_cutoff.txt'
 core_flexible_file = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/details/allgenome/all.genome.gene.faa.uc.species.sum'
 #contig = 10000
-contig = 5000
+contig = 2000
 print('python trunc_link.py -o %s'%(output_dir_merge))
 print('python dnds.py -s %s -o %s -cutoff %s -contig %s -linktrunc True'%(input_script, output_dir_merge,cutoff_file,contig))
 # simulation for PE genes within lineage
@@ -75,13 +76,16 @@ print('python PE_extract.py')
 co_assembly_dir = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/co-assembly/'
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
 output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/'
-cutoff_file = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/total_SNP_cutoff_lineage.txt'
+cutoff_file = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly/total_SNP_cutoff_species.txt'
 # to run hmmsearch, c3ddb -> logdefq -> checkjob -> ssh nodeXXX
-print('python parallel_evolution.py -i %s -s %s -o %s -cutoff %s -sig /scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/details/patients/summary/all.species.lineage.dmrca.txt'%(co_assembly_dir,input_script, output_dir_merge,cutoff_file))
+print('python parallel_evolution.py -i %s -s %s -o %s -cutoff %s -sig /scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/details/patients/summary/all.species.lineage.dmrca.txt'%(
+    co_assembly_dir,input_script, output_dir_merge,cutoff_file))
 print('python parallel_evolution_across_lineage.py -i %s -s %s -o %s -cutoff %s'%(co_assembly_dir,input_script, output_dir_merge,cutoff_file))
 print('please run %s/%s'%(input_script,'allannotate.sh'))
 print('please run %s/%s'%(input_script,'allannotate_all.sh'))
 
+# run tree
+print('python checkalltree.py')
 # step 6 dmrca
 input_script = '/scratch/users/anniz44/scripts/1MG/donor_species/assembly'
 output_dir_merge = '/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/'
@@ -1288,7 +1292,12 @@ f1.write(''.join(alloutput))
 f1.close()
 ################################################### END ########################################################
 ################################################### SET PATH ########################################################
+# sum up aligned region ORF length and non-ORF length -> cluster_length_new.py
+
+################################################### END ########################################################
+################################################### SET PATH ########################################################
 # sum up ref genome gene length and non-ORF length -> cluster_length.py
+# not used
 import os,glob
 from Bio import SeqIO
 from Bio.Seq import Seq

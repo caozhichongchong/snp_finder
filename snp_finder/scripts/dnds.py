@@ -20,6 +20,10 @@ required.add_argument("-o",
                       help="a folder to store all output",
                       type=str, default='snp_output/',
                       metavar='snp_output/')
+required.add_argument("-co",
+                      help="a list of co-assemblies",
+                      type=str, default='all.reference.list',
+                      metavar='all.reference.list')
 optional.add_argument("-core",
                       help="a file of core/flexible genes",
                       type=str, default='None',
@@ -690,6 +694,20 @@ if args.cutoff != 'None':
         cutoff = int(lines_set[1])
         Donor_species.setdefault(donor_species,cutoff)
 
+def load_coassembly_list(coassembly_list):
+    coassembly_list_set = dict()
+    for lines in open(coassembly_list, 'r'):
+        database = lines.split('##reference=file:')[1].split('\n')[0]
+        lineage = os.path.split(os.path.split(database)[0])[-1]
+        coassembly_list_set.setdefault(lineage,database)
+    return coassembly_list_set
+
+def find_assemlby(lineage_short):
+    if lineage_short in coassembly_list_set:
+        return coassembly_list_set[lineage_short]
+    else:
+        return coassembly_list_set.get(lineage_short.split('_')[0],'')
+
 ################################################### Main ########################################################
 # set up sum all species
 SNP_gene_all = SNP_gene() # all denovo mutation
@@ -702,6 +720,8 @@ SNP_gene_all_flexible = SNP_gene() # all mutations of flexible genes
 SNP_gene_all_flexible.init('allspecies_flexible')
 SNP_gene_all_core = SNP_gene() # all mutations of flexible genes
 SNP_gene_all_core.init('allspecies_core')
+# load reference genomes
+coassembly_list_set = load_coassembly_list(args.co)
 # process each vcf file
 Output2 = []
 all_species = dict()
@@ -712,11 +732,8 @@ if all_vcf_file == [] and args.linktrunc:
     all_vcf_file = glob.glob(os.path.join(output_dir_merge, '*%s' % (vcf_name)))
 for vcf_file in all_vcf_file:
     print(vcf_file)
-    raw_vcf = glob.glob(vcf_file.split('.donor')[0].split(vcf_name)[0]+'.all*.raw.vcf')
-    for lines in open(raw_vcf[0], 'r'):
-        if lines.startswith('##reference=file:'):
-            database = lines.split('##reference=file:')[1].split('\n')[0]
-            break
+    lineage_short = os.path.split(vcf_file)[-1].split('.donor')[0]
+    database = find_assemlby(lineage_short)
     donor_species = os.path.split(vcf_file)[-1].split(vcf_name)[0]
     if 'PB' in donor_species:
         donor_species = donor_species.replace('PB','PaDi')

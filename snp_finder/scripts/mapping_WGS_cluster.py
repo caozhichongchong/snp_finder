@@ -99,7 +99,6 @@ fastq_name = args.fq
 genome_name = args.fa
 # co-assembly cutoff
 cluster_cutoff = 3 # at least 3 genomes for SNP calling
-genomesize_cutoff = 1.2 # remove genomes with >=120% the mean size
 # homologous cutoff
 length_cutoff = 500 # 500 bp for homologous region
 identity_cutoff = 95 # 95% identity for homologous region

@@ -47,7 +47,7 @@ def load_baselinesnp(bowtievcf):
 
 def load_bowtie(bowtievcf):
     try:
-        f1 = open(bowtievcf + '.final2.txt', 'r')
+        f1 = open(bowtievcf + '.final.txt', 'r')
     except IOError:
         baseline_chrpos = set()
         if compare_to_baseline:
@@ -172,9 +172,9 @@ def load_mapper(mappervcf):
         f1.close()
 
 # find all snp vcfs
-allvcf_bowtie = glob.glob('%s/%s*%s'%(args.i,args.cluster,bowtievcfsuffix))
+allvcf_bowtie = glob.glob('%s/SNP_model*/merge/%s*%s'%(args.i,args.cluster,bowtievcfsuffix))
 allvcf_bowtie.sort()
-allvcf_mapper = glob.glob('%s/%s*%s'%(args.i,args.cluster,mappervcfsuffix))
+allvcf_mapper = glob.glob('%s/SNP_model*/merge/%s*%s'%(args.i,args.cluster,mappervcfsuffix))
 allvcf_mapper.sort()
 # process bowtie vcfs
 baseline_set = dict()

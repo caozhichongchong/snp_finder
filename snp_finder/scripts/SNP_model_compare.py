@@ -16,10 +16,6 @@ required.add_argument("-i",
                       help="path to all vcf files",
                       type=str, default='.',
                       metavar='input/')
-required.add_argument("-ref",
-                      help="path to ref files",
-                      type=str, default='.',
-                      metavar='ref/')
 # optional input genome
 optional.add_argument("-cluster",
                       help="a cluster to run, default is all clusters",
@@ -28,8 +24,6 @@ optional.add_argument("-cluster",
 ################################################## Definition ########################################################
 args = parser.parse_args()
 # set up path
-output_dir = args.i
-ref_dir = args.ref
 mapper_checkFP = True
 # function
 def load_vcf_ref(vcf_file):
@@ -75,7 +69,7 @@ def compare_vcf_detail(vcf, vcf_input1, vcf_input2, print_vcf_set):
         # print max 100 FPs
         temp_output = os.path.join(output_dir, 'grep.temp.txt')
         f1 = open(temp_output, 'w')
-        f1.write('\n'.join(vcf_set[:min(100, len(vcf_set) - 1)]))
+        f1.write('\n'.join(vcf_set))
         f1.close()
         os.system('grep -T -f %s %s --no-group-separator > %s' % (
             temp_output,
@@ -89,47 +83,53 @@ def compare_vcf_detail(vcf, vcf_input1, vcf_input2, print_vcf_set):
     return len(vcf_set)
 
 # ref
-vcf_ref = glob.glob(ref_dir + '/%s*.snp.txt'%(args.cluster))
-# summarize results
-summary_file = output_dir + '/model.sum.txt'
-f1=open(summary_file,'w')
-f1.write('sample\tFP\tFN\ttotal_refSNP\n')
-f1.close()
-vcf_ref.sort()
-print(vcf_ref)
-for vcf_ref_file in vcf_ref:
-    vcf_ref_file_name = os.path.split(vcf_ref_file)[-1].split('.snp.txt')[0]
-    print('process vcfs for reference %s'%(vcf_ref_file_name))
-    # load ref
-    vcf_inputref = load_vcf_ref(vcf_ref_file)
-    total_SNP_ref = len(vcf_inputref)
-    try:
-        # bowtie
-        compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.bowtie.flt.snp.vcf.final.vcf')[0])
-    except IndexError:
-        pass
-    try:
-        # minimap2
-        compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.minimap.flt.snp.vcf.final.vcf')[0])
-    except IndexError:
-        pass
-    try:
-        # bwa
-        compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.bwa.flt.snp.vcf.final.vcf')[0])
-    except IndexError:
-        pass
-    try:
-        # mapper
-        compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.mapper1.vcf.final.vcf')[0], mapper_checkFP)
-    except IndexError:
-        pass
-    try:
-        # mapper sam
-        compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.mapper1sam.flt.snp.vcf.final.vcf')[0], mapper_checkFP)
-    except IndexError:
-        pass
-    try:
-        # mapper sam
-        compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.kmermapper1.vcf.final.vcf')[0], mapper_checkFP)
-    except IndexError:
-        pass
+
+allresultdir = glob.glob('%s/SNP_model*/'%(args.i))
+for resultdir in allresultdir:
+    resultdirfilename = os.path.split(resultdir)[-1]
+    output_dir = '%s/merge/'%(resultdir)
+    ref_dir = '%s/data/'%(resultdir)
+    vcf_ref = glob.glob(ref_dir + '/%s*.snp.txt'%(args.cluster))
+    # summarize results
+    summary_file = output_dir + '/model.sum.%s.txt'%(resultdirfilename)
+    f1=open(summary_file,'w')
+    f1.write('sample\tFP\tFN\ttotal_refSNP\n')
+    f1.close()
+    vcf_ref.sort()
+    print(vcf_ref)
+    for vcf_ref_file in vcf_ref:
+        vcf_ref_file_name = os.path.split(vcf_ref_file)[-1].split('.snp.txt')[0]
+        print('process vcfs for reference %s'%(vcf_ref_file_name))
+        # load ref
+        vcf_inputref = load_vcf_ref(vcf_ref_file)
+        total_SNP_ref = len(vcf_inputref)
+        try:
+            # bowtie
+            compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.bowtie.flt.snp.vcf.final.vcf')[0])
+        except IndexError:
+            pass
+        try:
+            # minimap2
+            compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.minimap.flt.snp.vcf.final.vcf')[0])
+        except IndexError:
+            pass
+        try:
+            # bwa
+            compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.bwa.flt.snp.vcf.final.vcf')[0])
+        except IndexError:
+            pass
+        try:
+            # mapper
+            compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.mapper1.vcf.final.vcf')[0], mapper_checkFP)
+        except IndexError:
+            pass
+        try:
+            # mapper sam
+            compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.mapper1sam.flt.snp.vcf.final.vcf')[0], mapper_checkFP)
+        except IndexError:
+            pass
+        try:
+            # mapper sam
+            compare_vcf(glob.glob(output_dir + vcf_ref_file_name + '.kmermapper1.vcf.final.vcf')[0], mapper_checkFP)
+        except IndexError:
+            pass

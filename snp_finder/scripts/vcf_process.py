@@ -14,10 +14,11 @@ import argparse
 parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter)
 required = parser.add_argument_group('required arguments')
 optional = parser.add_argument_group('optional arguments')
-required.add_argument("-i",
-                      help="path of folders of WGS of each species",
-                      type=str, default='.',
-                      metavar='input/')
+required.add_argument("-o",
+                      help="a folder to store all output",
+                      type=str, default='/scratch/users/anniz44/genomes/donor_species/vcf_round2/merge/details/moredetails/BaFr_jay/',
+                      metavar='WGS/')
+
 required.add_argument("-fq",
                       help="file extension of WGS fastq #1 files",
                       type=str, default='_1.fastq',
@@ -32,10 +33,6 @@ optional.add_argument("-s",
                       help="a folder to store all scripts",
                       type=str, default='scripts/',
                       metavar='scripts/')
-optional.add_argument("-o",
-                      help="a folder to store all output",
-                      type=str, default='WGS/',
-                      metavar='WGS/')
 # optional search parameters
 optional.add_argument('-t',
                       help="Optional: set the thread number assigned for running XXX (default 1)",
@@ -45,11 +42,7 @@ optional.add_argument('-rd',
                       metavar="1-4", action='store', default=2, type=int)
 optional.add_argument('-addqual',
                       help="add quality of SNP mapping",
-                       action='store', default='True', type=str)
-optional.add_argument('-job',
-                      help="Optional: command to submit jobs",
-                      metavar="nohup or customized",
-                      action='store', default='jobmit', type=str)
+                       action='store', default='True', type=str)\
 # requirement for software calling
 optional.add_argument('-pro',
                           help="Optional: complete path to prodigal if not in PATH",
@@ -65,9 +58,9 @@ Tree = True
 Cov_dis = 20
 Cov_dis_overall = 1000 # calculate coverage per 1000 bp
 input_script = args.s
-output_dir = args.o + '/vcf_round%s/bwa'%(Round)
-output_dir_merge = args.o +'/vcf_round%s/merge'%(Round)
-vcf_name = '.all*.raw.vcf'
+output_dir = args.o #+ '/vcf_round%s/bwa'%(Round)
+output_dir_merge = args.o #+'/vcf_round%s/merge'%(Round)
+vcf_name = '*.raw.vcf'
 ref_filename = '.noHM.fasta'
 fastq_name = args.fq
 

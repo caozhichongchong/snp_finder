@@ -5,11 +5,14 @@ from Bio.Seq import Seq
 import pandas as pd
 
 #input_genome = '/scratch/users/anniz44/genomes/donor_species/SNP_curate/am_BA_g0003.fasta'
-input_genome = '/scratch/users/anniz44/genomes/donor_species/SNP_curate/human/SRR2842672.fasta'
-kmer_size = 50
+#input_genome = '/scratch/users/anniz44/genomes/donor_species/SNP_curate/human/SRR2842672.fasta'
+input_genome_dir = '/scratch/users/anniz44/genomes/donor_species/SNP_curate/test_data/new'
+allintput_genome = glob.glob('%s/*.fasta'%(input_genome_dir))
+kmer_size = 100
 interval = kmer_size * 2 # generates kmers for interval bp then stops for interval bp
-intervalmerge = interval * 2 # merge neighbouring kmers matching
-total_match_cutoff = 500
+intervalmerge = interval * 2 # merge neighbouring kmers matching the similar positions within intervalmerge bp
+total_match_cutoff = 5 # output POS with total_match_cutoff k-mers matching
+
 def kmer_seq(CHR, sequence,kmer_set):
     print('start spliting %s into kmers'%(CHR))
     for i in range(0,len(sequence) - kmer_size):
@@ -58,6 +61,7 @@ def compare_kmerssimple(kmer_set):
     alloutput = alloutput.sort_values(['CHR','POS'])
     alloutput.to_csv(input_genome.replace('.fasta','.duplicate.txt'), sep='\t', index=False)
 
-kmer_set = kmer_genome(input_genome)
-print('finished spliting genomes into kmers')
-compare_kmerssimple(kmer_set)
+for input_genome in allintput_genome:
+    kmer_set = kmer_genome(input_genome)
+    print('finished splitting genome %s into kmers'%(input_genome))
+    compare_kmerssimple(kmer_set)

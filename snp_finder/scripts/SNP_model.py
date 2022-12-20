@@ -14,23 +14,24 @@ required.add_argument("-i",
                       help="path of folders of WGS of each species",
                       type=str, default='.',
                       metavar='input/')
-required.add_argument("-fa",
+# optional output setup
+optional.add_argument("-fa",
                       help="file extension of fasta files",
                       type=str, default='.fasta',
                       metavar='.corrected.fasta')
-required.add_argument("-fq",
+optional.add_argument("-fq",
                       help="file extension of fastq files",
                       type=str, default='_1.fastq',
                       metavar='_1.fastq')
-# optional output setup
+
 optional.add_argument("-s",
-                      help="a folder to store all scripts",
-                      type=str, default='scripts/',
-                      metavar='scripts/')
+                      help="a folder for your mapper",
+                      type=str, default='mapper_folder/',
+                      metavar='mapper_folder/')
 optional.add_argument("-o",
                       help="a folder to store all output",
-                      type=str, default='snp_output/',
-                      metavar='snp_output/')
+                      type=str, default='.',
+                      metavar='.')
 optional.add_argument("-rmhm",
                       help="remove homologous regions reported in genome_removeduplicate.py output",
                       type=str, default='False',
@@ -44,6 +45,12 @@ optional.add_argument("-indel",
                       metavar='False or True')
 
 ################################################## Definition ########################################################
+# setting match score as 0 for all
+# mismatch 6, match 0 -> mismatch 4, match 2
+penalty = [6,5,3,0,1] # bowtie #mismatch penalty, gap open penalty, extension penalty, match score (not used for end-to-end), N dna penalty
+#penalty = [4+2,4,2,0,2-1] # minimap, match score = 2, np score -> change to N dna penalty, turning 2 into -2 = -4
+#penalty = [4+1,6,1,0,0+1] # bwa, match score = 1, no N dna penalty
+#penalty = [1,2,0.5,0,0.1] # mapper
 args = parser.parse_args()
 input_script = args.s
 genome_root = args.i
@@ -51,9 +58,10 @@ output_dir = args.o + '/SNP_model'
 genome_name = args.fa
 fastq_name=args.fq
 fastq_name2=args.fq.replace('1','2')
-cause_SNP = True
+cause_SNP = False
 mapping_file = True
 time_evaluation = False
+penalty_test = False
 homologous_region_length = 50
 if time_evaluation:
     input_script_sub = '%s/SNP_model'%(input_script)
@@ -63,7 +71,9 @@ if args.indel == 'False':
     output_dir += '_noindel'
     input_script_sub += '_noindel'
 
-latest_mapper = glob.glob('%s/mapper-1*.jar'%(args.s))[0]
+latest_mapper = glob.glob('%s/mapper-1*.jar'%(args.s))
+latest_mapper.sort()
+latest_mapper=latest_mapper[-1]
 # Set up A T G C
 Allels = dict()
 Allels['A']=0
@@ -110,7 +120,7 @@ try:
 except IOError:
     pass
 
-os.system('rm -r %s'%(input_script_sub))
+#os.system('rm -r %s'%(input_script_sub))
 try:
     os.mkdir(input_script_sub)
 except IOError:
@@ -280,50 +290,78 @@ def modelSNP(seq,Chr,num_mut_chr,num_indel_chr):
         SNP_output.append('\t'.join(temp_line)+'\n')
     return [''.join(seq),SNP_output,indel_output]
 
-def run_vcf_WGS(files,files2,database,tempbamoutput):
-    # generate code
-    cmds = 'bowtie2-build %s %s\n'%(database,database)
-    try:
-        f1 = open('%s.sorted.bam' % (tempbamoutput),'r')
-    except IOError:
-        cmds += 'bowtie2 --threads %s -x %s -1 %s -2 %s |samtools view -@ %s -S -b >%s.bam\nsamtools sort -@ %s %s.bam -o %s.sorted.bam\nsamtools index -@ %s %s.sorted.bam\n' % (
-            min(40, args.t), database, files, files2,  min(40, args.t),
-            tempbamoutput,  min(40, args.t), tempbamoutput, tempbamoutput, min(40, args.t),
-            tempbamoutput)
-        cmds += 'rm -r %s.sam %s.bam %s.bam.bai\n' % (tempbamoutput, tempbamoutput, tempbamoutput)
-    return [cmds, '%s.sorted.bam' % (tempbamoutput)]
-
 def merge_sample(database,vcfoutput,allsam):
     cmds = ''
-    cmds += 'bcftools mpileup --ff UNMAP,QCFAIL,SECONDARY --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -Ou -d3000 -A -f  %s %s | bcftools call -Ov -A -M -c --threads %s > %s.raw.vcf\n' % (
-             min(40, args.t), database,
-            ' '.join(allsam), min(40, args.t), vcfoutput)
     if not time_evaluation:
+        cmds += 'bcftools mpileup --ff UNMAP,QCFAIL,SECONDARY --threads %s -a FMT/ADF,FMT/ADR,FMT/AD -Ou -d3000 -A -f  %s %s | bcftools call -Ov -A -M -c --threads %s > %s.raw.vcf\n' % (
+                 min(40, args.t), database,
+                ' '.join(allsam), min(40, args.t), vcfoutput)
         cmds += 'bcftools view -H -v snps -i \'QUAL>=20 && MIN(DP)>=3\' %s.raw.vcf > %s.flt.snp.vcf \n' % (
                 vcfoutput, vcfoutput)
         cmds += 'bcftools view -H -v indels -i \'QUAL>=20 && MIN(DP)>=3\' %s.raw.vcf > %s.flt.indel.vcf \n' % (
                 vcfoutput, vcfoutput)
-    cmds += 'rm %s\n'%(' '.join(allsam))
-    if '.0.SNP.fasta.bowtie' not in vcfoutput:
-        cmds += 'rm %s.raw.vcf\n' % (vcfoutput)
+        cmds += 'rm %s\n'%(' '.join(allsam))
+        if '.0.SNP.fasta.bowtie' not in vcfoutput:
+            cmds += 'rm %s.raw.vcf\n' % (vcfoutput)
     return cmds
+
+def run_vcf_WGS(files,files2,database,tempbamoutput):
+    # generate code
+    cmds = 'bowtie2-build %s %s\n'%(database,database)
+    if not time_evaluation:
+        try:
+            f1 = open('%s.sorted.bam' % (tempbamoutput),'r')
+        except IOError:
+            cmds += 'bowtie2 --threads %s  -x %s -1 %s -2 %s |samtools view -@ %s -S -b >%s.bam\nsamtools sort -@ %s %s.bam -o %s.sorted.bam\nsamtools index -@ %s %s.sorted.bam\n' % (
+                min(40, args.t), database, files, files2,  min(40, args.t),
+                tempbamoutput,  min(40, args.t), tempbamoutput, tempbamoutput, min(40, args.t),
+                tempbamoutput)
+            cmds += 'rm -r %s.sam %s.bam %s.bam.bai\n' % (tempbamoutput, tempbamoutput, tempbamoutput)
+    elif penalty_test:
+        # not using --ma for end to end model, --ignore-quals for mismatch quality, always use the highest penalty
+        cmds += 'bowtie2 --threads %s --mp %s,%s --rfg %s,%s --rdg %s,%s --np %s --ignore-quals -x %s -1 %s -2 %s -S %s.sam\n' % (
+            min(40, args.t), penalty[0],penalty[0],penalty[1],penalty[2],penalty[1],penalty[2],penalty[4], database, files, files2, tempbamoutput)
+    else:
+        cmds += 'bowtie2 --threads %s -x %s -1 %s -2 %s -S %s.sam\n' % (
+            min(40, args.t), database, files, files2, tempbamoutput)
+    return [cmds, '%s.sorted.bam' % (tempbamoutput)]
+
 
 def run_minimap(files,files2,database,tempbamoutput):
     cmds = 'minimap2 -d %s.mmi %s \n' % (database, database)
-    cmds += 'minimap2 -ax sr -N 10 -p 0.9 -t %s %s.mmi %s %s >%s.sam\npy39\nsamtools view -@ %s -S -b %s.sam >%s.bam\nsamtools sort -@ %s %s.bam -o %s.sorted.bam\nsamtools index -@ %s %s.sorted.bam\n' % (
-        min(40, args.t), database, files, files2, tempbamoutput, min(40, args.t),tempbamoutput,
-            tempbamoutput,  min(40, args.t), tempbamoutput, tempbamoutput, min(40, args.t),
-            tempbamoutput)
-    cmds += 'rm -r %s.sam %s.bam %s.bam.bai\n' % (tempbamoutput, tempbamoutput, tempbamoutput)
+    if not time_evaluation:
+        cmds += 'minimap2 -ax sr -t %s %s.mmi %s %s >%s.sam\npy39\nsamtools view -@ %s -S -b %s.sam >%s.bam\nsamtools sort -@ %s %s.bam -o %s.sorted.bam\nsamtools index -@ %s %s.sorted.bam\n' % (
+            min(40, args.t), database, files, files2, tempbamoutput, min(40, args.t),tempbamoutput,
+                tempbamoutput,  min(40, args.t), tempbamoutput, tempbamoutput, min(40, args.t),
+                tempbamoutput)
+        cmds += 'rm -r %s.sam %s.bam %s.bam.bai\n' % (tempbamoutput, tempbamoutput, tempbamoutput)
+    elif penalty_test:
+        # -A match score set as 2, -B -= 2 and --score-N += 2
+        cmds += 'minimap2 -ax sr -t %s -B %s -O %s -E %s -A %s --score-N %s %s.mmi %s %s >%s.sam\n' % (
+            min(40, args.t), penalty[0] - 2,penalty[1],penalty[2],penalty[3] + 2 ,penalty[3]-penalty[4] + 2, database, files, files2, tempbamoutput)
+    else:
+        # -A match score set as 2, -B -= 2 and --score-N += 2
+        cmds += 'minimap2 -ax sr -t %s %s.mmi %s %s >%s.sam\n' % (
+            min(40, args.t),
+            database, files, files2, tempbamoutput)
     return [cmds, '%s.sorted.bam' % (tempbamoutput)]
 
 def run_bwa(files,files2,database,tempbamoutput):
     cmds = 'bwa index %s\n'%(database)
-    cmds += 'bwa mem %s %s %s > %s.sam\npy39\nsamtools view -@ %s -S -b %s.sam >%s.bam\nsamtools sort -@ %s %s.bam -o %s.sorted.bam\nsamtools index -@ %s %s.sorted.bam\n' % (
-         database, files, files2, tempbamoutput, min(40, args.t),tempbamoutput,
-            tempbamoutput,  min(40, args.t), tempbamoutput, tempbamoutput, min(40, args.t),
-            tempbamoutput)
-    cmds += 'rm -r %s.sam %s.bam %s.bam.bai\n' % (tempbamoutput, tempbamoutput, tempbamoutput)
+    if not time_evaluation:
+        cmds += 'bwa mem -t %s %s %s %s > %s.sam\npy39\nsamtools view -@ %s -S -b %s.sam >%s.bam\nsamtools sort -@ %s %s.bam -o %s.sorted.bam\nsamtools index -@ %s %s.sorted.bam\n' % (
+            min(40, args.t), database, files, files2, tempbamoutput, min(40, args.t),tempbamoutput,
+                tempbamoutput,  min(40, args.t), tempbamoutput, tempbamoutput, min(40, args.t),
+                tempbamoutput)
+        cmds += 'rm -r %s.sam %s.bam %s.bam.bai\n' % (tempbamoutput, tempbamoutput, tempbamoutput)
+    elif penalty_test:
+        # -A match score set as 2, -B -= 2
+        cmds += 'bwa mem -t %s -B %s -O %s -E %s -A %s %s %s %s > %s.sam\n' % (
+            min(40, args.t), penalty[0] - 2,penalty[1],penalty[2],penalty[3]+ 2, database, files, files2, tempbamoutput)
+    else:# -A match score set as 2, -B -= 2
+        cmds += 'bwa mem -t %s %s %s %s > %s.sam\n' % (
+            min(40, args.t), database, files, files2, tempbamoutput)
+
     return [cmds, '%s.sorted.bam' % (tempbamoutput)]
 
 def modelSNPall(Input_seq, Input_id, Length,num_mut,database_name):
@@ -372,12 +410,29 @@ def run_mapper(files,files2,database,tempbamoutput):
     max_penalty = 0.1 # default
     if '200000' in database:
         max_penalty = 0.2
-    if 'human' in args.i:
-        cmds = '/usr/bin/time -v java -Xms850g -Xmx850g -jar %s  --max-penalty %s --num-threads 40 --reference %s --queries %s  --queries %s --out-vcf %s.vcf\n' % (
-            latest_mapper, max_penalty, database, files, files2, tempbamoutput)
+    if not time_evaluation:
+        if 'human' in args.i:
+            cmds = '/usr/bin/time -v java -Xms850g -Xmx850g -jar %s  --max-penalty %.2f --num-threads %s --reference %s --paired-queries %s %s --out-vcf %s.vcf\n' % (
+                latest_mapper, max_penalty, min(40, args.t),database, files, files2, tempbamoutput)
+        else:
+            cmds = '/usr/bin/time -v java -Xms10g -Xmx10g -jar %s --max-penalty %.2f --num-threads %s --reference %s --paired-queries %s %s --out-vcf %s.vcf\n' % (
+                latest_mapper, max_penalty, min(40, args.t),database, files, files2, tempbamoutput)
+    elif penalty_test:
+        penalty2 = [penalty[3]+penalty[0],penalty[1],penalty[2]]
+        max_penalty = penalty2[0]*0.1
+        if 'human' in args.i:
+            cmds = '/usr/bin/time -v java -Xms850g -Xmx850g -jar %s --max-penalty %.2f --snp-penalty %s --new-indel-penalty %s --extend-indel-penalty %s --num-threads %s --reference %s --paired-queries %s %s --out-sam %s.sam\n' % (
+                latest_mapper, max_penalty, penalty2[0],penalty2[1],penalty2[2],min(40, args.t),database, files, files2, tempbamoutput)
+        else:
+            cmds = '/usr/bin/time -v java -Xms10g -Xmx10g -jar %s --max-penalty %.2f --snp-penalty %s --new-indel-penalty %s --extend-indel-penalty %s --num-threads %s --reference %s --paired-queries %s %s --out-sam %s.sam\n' % (
+                latest_mapper, max_penalty, penalty2[0],penalty2[1],penalty2[2],min(40, args.t),database, files, files2, tempbamoutput)
     else:
-        cmds = '/usr/bin/time -v java -Xms10g -Xmx10g -jar %s --max-penalty %s --num-threads 40 --reference %s --queries %s  --queries %s --out-vcf %s.vcf\n' % (
-            latest_mapper, max_penalty, database, files, files2, tempbamoutput)
+        if 'human' in args.i:
+            cmds = '/usr/bin/time -v java -Xms850g -Xmx850g -jar %s --max-penalty %.2f --num-threads %s --reference %s --paired-queries %s %s --out-sam %s.sam\n' % (
+                latest_mapper, max_penalty, min(40, args.t),database, files, files2, tempbamoutput)
+        else:
+            cmds = '/usr/bin/time -v java -Xms10g -Xmx10g -jar %s --max-penalty %.2f --num-threads %s --reference %s --paired-queries %s %s --out-sam %s.sam\n' % (
+                latest_mapper, max_penalty, min(40, args.t),database, files, files2, tempbamoutput)
     return cmds
 
 # load homologous regions
@@ -386,17 +441,11 @@ if args.rmhm != 'False':
     homologous_regions = load_homologous_regions(args.rmhm)
 
 # load database
-allgenome = glob.glob('%s/*%s'%(genome_root,genome_name))
-for database in allgenome:
+allgenome = glob.glob('%s/*%s'%(genome_root,fastq_name))
+for fastq_file in allgenome:
+    database = '%s/%s'%(genome_root,os.path.split(fastq_file)[-1].replace(fastq_name,genome_name))
     database_name = os.path.split(database)[-1]
-    database_file = '%s.fna'%(database)
-    try:
-        open(database_file,'r')
-    except IOError:
-        os.system('prodigal -q -i %s -d %s'%(database,database_file))
-    Ref_seq, Length, Input_seq, Input_id = loaddatabase(database_file,database)
     # find fastq
-    fastq_file = '%s/%s'%(genome_root,database_name.replace(genome_name,fastq_name))
     fastq_file2 = '%s/%s'%(genome_root,database_name.replace(genome_name,fastq_name2))
     # cause SNP
     if len(mut_set) != 0:
@@ -415,6 +464,12 @@ for database in allgenome:
                 f1.close()
         elif cause_SNP:
             # simulate fastq files for mutated strains
+            database_file = '%s.fna' % (database)
+            try:
+                open(database_file, 'r')
+            except IOError:
+                os.system('prodigal -q -i %s -d %s' % (database, database_file))
+            Ref_seq, Length, Input_seq, Input_id = loaddatabase(database_file, database)
             mutated_genome = modelSNPall(Input_seq, Input_id, Length,num_mut,database_name)
         else:
             mutated_genome = os.path.join(output_dir, 'data/%s.%s.SNP.fasta' % (database_name, num_mut))
@@ -460,28 +515,29 @@ for database in allgenome:
             # run bowtie and mapper on the same node
             cmds = run_mapper(fastq_file, fastq_file2, mutated_genome, os.path.join(output_dir + '/merge',
                                                                                     mutated_genome_filename + '.mapper1'))
-            cmds += '/usr/bin/time -v #sh %s\n'%(os.path.join(input_script_sub, '%s.bowtie.vcf.sh' % (mutated_genome_filename)))
-            cmds += '/usr/bin/time -v #sh %s\n' % (os.path.join(input_script_sub, '%s.minimap.vcf.sh' % (mutated_genome_filename)))
-            cmds += '/usr/bin/time -v #sh %s\n' % (os.path.join(input_script_sub, '%s.bwa.vcf.sh' % (mutated_genome_filename)))
+            cmds += '/usr/bin/time -v sh %s\n'%(os.path.join(input_script_sub, '%s.bowtie.vcf.sh' % (mutated_genome_filename)))
+            cmds += '/usr/bin/time -v sh %s\n' % (os.path.join(input_script_sub, '%s.minimap.vcf.sh' % (mutated_genome_filename)))
+            cmds += '/usr/bin/time -v sh %s\n' % (os.path.join(input_script_sub, '%s.bwa.vcf.sh' % (mutated_genome_filename)))
             f1 = open(os.path.join(input_script_sub, '%s.mapper1.vcf.sh' % (mutated_genome_filename)), 'w')
             f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
             f1.close()
-
-
         mut_time -= 1
 
 f1 = open(os.path.join(input_script, 'allsnpmodel.sh'), 'w')
 f1.write('#!/bin/bash\nsource ~/.bashrc\n')
 total_test = 1
 if time_evaluation:
-    total_test = 10 # run each pipeline 10 times
+    total_test = 2 # run each pipeline 10 times
 for m in range(0,total_test):
     for sub_scripts in glob.glob(os.path.join(input_script_sub, '*.mapper1.vcf.sh')):
         os.system('cp %s %s%s'%(sub_scripts,sub_scripts,m))
         if 'human' in args.i:
             f1.write('jobmit %s%s %s%s big\n' % (sub_scripts,m,os.path.split(sub_scripts)[-1],m))
         else:
-            f1.write('jobmit %s%s %s%s small\n' % (sub_scripts, m, os.path.split(sub_scripts)[-1], m))
+            f1.write('jobmit %s%s %s%s small1TB\n' % (sub_scripts, m, os.path.split(sub_scripts)[-1], m))
+            #f1.write('sh %s%s 1> %s%s.out 2> %s%s.err\n' % (sub_scripts, m, sub_scripts, m, sub_scripts, m))
+            #f1.write('rm %s/bwa/*.sam\n'%(output_dir))
+os.system('rm %s/*.mapper1.vcf.sh'%(input_script_sub))
 f1.close()
 
 ################################################### END ########################################################

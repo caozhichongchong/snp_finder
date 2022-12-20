@@ -9,13 +9,9 @@ parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpForm
 required = parser.add_argument_group('required arguments')
 optional = parser.add_argument_group('optional arguments')
 required.add_argument("-i",
-                      help="path to all vcf files",
+                      help="path to all results (ref data and vcfs)",
                       type=str, default='.',
                       metavar='input/')
-required.add_argument("-ref",
-                      help="path to all ref",
-                      type=str, default='.',
-                      metavar='ref/')
 # optional input genome
 optional.add_argument("-cluster",
                       help="a cluster to run, default is all clusters",
@@ -275,39 +271,41 @@ def load_indelmapper(mappervcf, allindel):
     return [100 - len(ref_indel)] + indel_result
 
 ##################################################### Main ##########################################################
-allref = glob.glob('%s/%s*.indel.txt'%(args.ref,args.cluster))
-allsum = ['Sample\tTool\tFN\tTP\tFP_samePOS\tFP_diffPOS\n']
-f2 = open('%s/modelindelsumlen.txt' % (args.i), 'w')
-f2.write('Indellen\tSample\tTool\tTP\tFN\tFP_samePOS\tFP_diffPOS\n')
-for ref in allref:
-    if '.500000.' not in ref:
-        print('%s load ref indel %s' % (datetime.now(), ref))
-        allindel, allindel_len = load_refindel(ref)
-        # print(allindel)
-        samplename = os.path.split(ref)[-1].split('.indel.txt')[0]
-        if True:
-            # bowtie
-            bowtievcf = '%s/%s.bowtie.flt.indel.vcf' % (args.i, samplename)
-            print('%s process bowtie indel %s' % (datetime.now(), bowtievcf))
-            indel_result = load_indel(bowtievcf, allindel)
-            allsum.append('%s\tbowtie2\t%s\t%s\t%s\t%s\n' % (samplename, indel_result[0], indel_result[1], indel_result[2], indel_result[3]))
-            # bwa
-            bwavcf = '%s/%s.bwa.flt.indel.vcf' % (args.i, samplename)
-            print('%s process bwa indel %s' % (datetime.now(), bwavcf))
-            indel_result = load_indel(bwavcf, allindel)
-            allsum.append('%s\tbwa\t%s\t%s\t%s\t%s\n' % (samplename, indel_result[0], indel_result[1], indel_result[2], indel_result[3]))
-            # minimap
-            minimapvcf = '%s/%s.minimap.flt.indel.vcf' % (args.i, samplename)
-            print('%s process minimap indel %s' % (datetime.now(), minimapvcf))
-            indel_result = load_indel(minimapvcf, allindel)
-            allsum.append('%s\tminimap2\t%s\t%s\t%s\t%s\n' % (samplename, indel_result[0], indel_result[1], indel_result[2], indel_result[3]))
-        # mapper
-        mappervcf = '%s/%s.mapper1.vcf.snp' % (args.i, samplename)
-        print('%s process mapper indel %s' % (datetime.now(), mappervcf))
-        indel_result = load_indelmapper(mappervcf, allindel)
-        allsum.append('%s\tmapper\t%s\t%s\t%s\t%s\n' % (samplename, indel_result[0], indel_result[1], indel_result[2], indel_result[3]))
-
-f1 = open('%s/modelindelsum.txt' % (args.i), 'w')
-f1.write(''.join(allsum))
-f1.close()
-f2.close()
+allresultdir = glob.glob('%s/SNP_model*/'%(args.i))
+for resultdir in allresultdir:
+    resultdirfilename = os.path.split(resultdir)[-1]
+    allref = glob.glob('%s/data/%s*.indel.txt'%(resultdir,args.cluster))
+    allsum = ['Sample\tTool\tFN\tTP\tFP_samePOS\tFP_diffPOS\n']
+    f2 = open('%s/modelindelsumlen_%s.txt' % (resultdir,resultdirfilename), 'w')
+    f2.write('Indellen\tSample\tTool\tTP\tFN\tFP_samePOS\tFP_diffPOS\n')
+    for ref in allref:
+        if '.500000.' not in ref:
+            print('%s load ref indel %s' % (datetime.now(), ref))
+            allindel, allindel_len = load_refindel(ref)
+            # print(allindel)
+            samplename = os.path.split(ref)[-1].split('.indel.txt')[0]
+            if True:
+                # bowtie
+                bowtievcf = '%s/merge/%s.bowtie.flt.indel.vcf' % (resultdir, samplename)
+                print('%s process bowtie indel %s' % (datetime.now(), bowtievcf))
+                indel_result = load_indel(bowtievcf, allindel)
+                allsum.append('%s\tbowtie2\t%s\t%s\t%s\t%s\n' % (samplename, indel_result[0], indel_result[1], indel_result[2], indel_result[3]))
+                # bwa
+                bwavcf = '%s/merge/%s.bwa.flt.indel.vcf' % (resultdir, samplename)
+                print('%s process bwa indel %s' % (datetime.now(), bwavcf))
+                indel_result = load_indel(bwavcf, allindel)
+                allsum.append('%s\tbwa\t%s\t%s\t%s\t%s\n' % (samplename, indel_result[0], indel_result[1], indel_result[2], indel_result[3]))
+                # minimap
+                minimapvcf = '%s/merge/%s.minimap.flt.indel.vcf' % (resultdir, samplename)
+                print('%s process minimap indel %s' % (datetime.now(), minimapvcf))
+                indel_result = load_indel(minimapvcf, allindel)
+                allsum.append('%s\tminimap2\t%s\t%s\t%s\t%s\n' % (samplename, indel_result[0], indel_result[1], indel_result[2], indel_result[3]))
+            # mapper
+            mappervcf = '%s/merge/%s.mapper1.vcf.snp' % (resultdir, samplename)
+            print('%s process mapper indel %s' % (datetime.now(), mappervcf))
+            indel_result = load_indelmapper(mappervcf, allindel)
+            allsum.append('%s\tmapper\t%s\t%s\t%s\t%s\n' % (samplename, indel_result[0], indel_result[1], indel_result[2], indel_result[3]))
+    f1 = open('%s/modelindelsum_%s.txt' % (resultdir,resultdirfilename), 'w')
+    f1.write(''.join(allsum))
+    f1.close()
+    f2.close()

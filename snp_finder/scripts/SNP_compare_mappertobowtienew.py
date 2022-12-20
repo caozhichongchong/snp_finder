@@ -17,7 +17,7 @@ required.add_argument("-i",
 ################################################## Definition ########################################################
 args = parser.parse_args()
 output_dir_all = args.i + '/../SNP_compare/'
-latestmapper = glob.glob('/scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/mapper1.*.jar')[0]
+latestmapper = glob.glob('/scratch/users/anniz44/scripts/1MG/donor_species/snp_curate/mapper-1.*.jar')[0]
 maxseq = 200
 try:
     os.mkdir(output_dir_all)
