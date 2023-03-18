@@ -1,17 +1,14 @@
-import glob
-import os
+import glob,os
 from Bio import SeqIO
-from Bio.Seq import Seq
 import pandas as pd
 
-#input_genome = '/scratch/users/anniz44/genomes/donor_species/SNP_curate/am_BA_g0003.fasta'
 #input_genome = '/scratch/users/anniz44/genomes/donor_species/SNP_curate/human/SRR2842672.fasta'
 input_genome_dir = '/scratch/users/anniz44/genomes/donor_species/SNP_curate/test_data/new'
+#input_genome_dir = '/scratch/users/anniz44/genomes/donor_species/SNP_curate/test_data/'
 allintput_genome = glob.glob('%s/*.fasta'%(input_genome_dir))
-kmer_size = 100
+kmer_size = 20
 interval = kmer_size * 2 # generates kmers for interval bp then stops for interval bp
-intervalmerge = interval * 2 # merge neighbouring kmers matching the similar positions within intervalmerge bp
-total_match_cutoff = 5 # output POS with total_match_cutoff k-mers matching
+total_match_cutoff = 2 # output POS with total_match_cutoff k-mers matching
 
 def kmer_seq(CHR, sequence,kmer_set):
     print('start spliting %s into kmers'%(CHR))
@@ -29,12 +26,6 @@ def kmer_genome(input_genome):
     for record in SeqIO.parse(input_genome, 'fasta'):
         kmer_set = kmer_seq(str(record.id), str(record.seq),kmer_set)
     return kmer_set
-
-def comparePOS(POSstart,POSend,POS):
-    if POS >= POSstart - intervalmerge and POS <= POSend + intervalmerge:
-        return [True,min(POSstart,POS), max(POS,POSend)]
-    else:
-        return [False]
 
 def compare_kmerssimple(kmer_set):
     alloutput = dict()

@@ -33,7 +33,7 @@ clonal_file = os.path.join('%s/clonal_genelength_new.txt'%(args.snp))
 core_file = args.core
 genus_num_cutoff = 3
 simulation_round = 1000
-pvalue_max = 0.01
+pvalue_max = 0.05
 ################################################### Function ########################################################
 def load_core(core_file):
     Core = set()
@@ -111,26 +111,33 @@ def pvalue_mutgene(SNP, ORFlength,gene_set):
     pvalueset = set()
     mut_rate = float(SNP)/ORFlength
     num_lineage_in_species = len(species_lineage[species])
-    for cluster in gene_set:
-        if cluster in Cluster_length:
+    allgenepvalue = ['gene\tpvalue\n']
+    for cluster in Cluster_length:
+        if cluster in gene_set:
             this_gene_length = Cluster_length[cluster]*3 # aa to dna
             SNP_gene,lineage_num,truncation_gene,N_SNP_gene = gene_set.get(cluster,[0,set(),[1], 0,0]) # how many mutations
             num_strains_with_mut = len(Cluster_count[cluster][species])/num_lineage_in_species # num unique genes of the same cluster in a species / number of lineages
             # considering the prevalence of this gene among strains
-            pvalue = 1-poisson.cdf(SNP_gene,mut_rate*this_gene_length*num_strains_with_mut) + \
-                     poisson.pmf(SNP_gene,mut_rate*this_gene_length*num_strains_with_mut)# greater than and equal to
+            pvalue = 1-poisson.cdf(SNP_gene - 1,mut_rate*this_gene_length*num_strains_with_mut) # greater than and equal to
             flexible = 'Flexible'
             if cluster in Core_cluster:
                 flexible = 'Core'
             allsum_details.append('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%.5f\t%s\t%s\t%s\n'%(species,cluster,pvalue,SNP_gene,N_SNP_gene,truncation_gene,this_gene_length,num_strains_with_mut,mut_rate*1000,flexible,len(lineage_num)))
+            allgenepvalue.append('%s\t%s\n' % (cluster, pvalue))
             if SNP_gene > 1 and len(lineage_num) > 1 and pvalue <= pvalue_max:
                 # potential PE
                 pvalueset.add(pvalue)
                 SNP_genome_set_all.add(len(lineage_num))
+        else:
+            allgenepvalue.append('%s\t%s\n' % (cluster, 1))
     pvalueset = list(pvalueset)
     pvalueset.sort(reverse=True)
     SNP_genome_set_all = list(SNP_genome_set_all)
     SNP_genome_set_all.sort()
+    if len(pvalueset) > 0:
+        foutput = open('%s/summary/allgenes.poisson.pvalue.across.%s.details.txt' % (args.snp, species), 'w')
+        foutput.write(''.join(allgenepvalue))
+        foutput.close()
     return [pvalueset, SNP_genome_set_all]
 
 def mutation_sim(SNP, ORFlength,pvalueset,SNP_genome_set_all):
@@ -138,6 +145,7 @@ def mutation_sim(SNP, ORFlength,pvalueset,SNP_genome_set_all):
     cluster_length_set = []
     mut_rate = float(SNP) / ORFlength
     num_lineage_in_species = len(species_lineage[species])
+    allgenepvalue = ['simulation\tpvalue\n']
     print(len(Cluster_species[species]))
     for cluster in Cluster_species[species]:
         cluster_num.append(cluster)
@@ -146,59 +154,65 @@ def mutation_sim(SNP, ORFlength,pvalueset,SNP_genome_set_all):
         cluster_mut = random.choices(cluster_num, weights=cluster_length_set, k=SNP)
         allclusters_mut = set(cluster_mut)
         allsim_cluster = dict()
-        for clusterID in allclusters_mut:
-            SNP_cluster = cluster_mut.count(clusterID)
-            if SNP_cluster > 1:
-                # FP PE
+        for clusterID in cluster_num:
+            if clusterID in allclusters_mut:
+                SNP_cluster = cluster_mut.count(clusterID)
                 this_cluster_length = Cluster_length[clusterID]
-                num_strains_with_mut = len(Cluster_count[clusterID][species])/num_lineage_in_species
-                pvalue = 1 - poisson.cdf(SNP_cluster, mut_rate * this_cluster_length * num_strains_with_mut) + \
-                         poisson.pmf(SNP_cluster,
-                                     mut_rate * this_cluster_length * num_strains_with_mut)  # greater than and equal to
-                for SNP_cluster_sub in range(2, SNP_cluster):
-                    allsim_cluster.setdefault(SNP_cluster_sub, [])
-                    allsim_cluster[SNP_cluster_sub].append(pvalue)
+                num_strains_with_mut = len(Cluster_count[clusterID][species]) / num_lineage_in_species
+                pvalue = 1 - poisson.cdf(SNP_cluster - 1, mut_rate * this_cluster_length * num_strains_with_mut) # greater than and equal to
+                allgenepvalue.append('%s\t%s\n' % (i, pvalue))
+                if SNP_cluster > 1:
+                    # FP PE
+                    for SNP_cluster_sub in range(2, SNP_cluster):
+                        allsim_cluster.setdefault(SNP_cluster_sub, [])
+                        allsim_cluster[SNP_cluster_sub].append(pvalue)
+            else:
+                allgenepvalue.append('%s\t%s\n' % (i, 1))
         for SNP_gene_sub in SNP_genome_set_all:
             for pvalue in pvalueset:
                 num_genes_pass_pvalue = len([x for x in allsim_cluster.get(SNP_gene_sub,[]) if x <= pvalue])
                 allsum.append('%s\t%s\t%s\t%s\t%s\n'%(species,SNP_gene_sub,pvalue,i,num_genes_pass_pvalue))
+    if len(pvalueset) > 0:
+        foutput = open('%s/summary/allgenes.poisson.pvalue.across.simulation.%s.details.txt' % (args.snp, species), 'w')
+        foutput.write(''.join(allgenepvalue))
+        foutput.close()
     return allsum
 
-def load_cluster(cluster_file,Core,cluster_fasta):
+def load_blastn(allblastnfiles):
     Cluster = dict()
-    Core_cluster = set()
     Cluster_length = dict()
-    Species_gene_length = dict()
     Cluster_count = dict()
     Cluster_species = dict()
-    for record in SeqIO.parse(cluster_fasta, 'fasta'):
-        Cluster_length.setdefault(str(record.id),len(str(record.seq)))
-    if cluster_file!= 'None':
-        for lines in open(cluster_file,'r'):
-            lines_set = lines.split('\n')[0].split('\t')
-            cluster = lines_set[9]
-            gene_name = lines_set[8]
-            species = gene_name.split('_')[0]
-            if cluster == '*':
-                cluster = gene_name
-            if gene_name in Core:
-                Core_cluster.add(cluster)
-            Cluster_species.setdefault(species,set())
-            Cluster_species[species].add(cluster)
-            Species_gene_length.setdefault(species, set())
-            Species_gene_length[species].add(cluster)
-            Cluster.setdefault(gene_name,cluster)
-            Cluster_count.setdefault(cluster,dict())
-            Cluster_count[cluster].setdefault(species,set())
-            Cluster_count[cluster][species].add(gene_name)
-    return [Cluster,Core_cluster,Cluster_length,Species_gene_length,Cluster_count,Cluster_species]
+    for blastnfile in allblastnfiles:
+        blastnfilename = os.path.basename(blastnfile)
+        species = blastnfilename.split('_')[0]
+        lineage_new1 = blastnfilename.split('_%s'%(species))[0]
+        lineage_new2 = '_%s'%(species) + blastnfilename.split('_%s'%(species))[1].split('.blasn.txt')[0]
+        for lines in open(blastnfile,'r'):
+            lines_set = lines.split('\t')
+            Gene1, Gene2, Identity, Length = lines_set[0:4]
+            Gene1 = change_genename(Gene1, lineage_new1)
+            Gene2 = change_genename(Gene2, lineage_new2)
+            Length = int(Length)
+            Cluster.setdefault(Gene1, Gene2)
+            Cluster.setdefault(Gene2, Gene2)
+            Cluster_length.setdefault(Gene2, Length)
+            Cluster_length[Gene2] = max(Cluster_length[Gene2],Length)
+            Cluster_count.setdefault(Gene2, dict())
+            Cluster_count[Gene2].setdefault(species, set())
+            Cluster_count[Gene2][species].add(Gene2)
+            Cluster_count[Gene2][species].add(Gene1)
+            Cluster_species.setdefault(species, set())
+            Cluster_species[species].add(Gene2)
+    return [Cluster, Cluster_length, Cluster_count, Cluster_species]
 
 ################################################### Main ########################################################
 # load core flexible genes
 Core = load_core(core_file)
-# load cluster of all genes
-Cluster,Core_cluster,Cluster_length,Species_gene_length,Cluster_count,Cluster_species = load_cluster(core_file.split('.species.sum')[0],
-                                                   Core,core_file.split('.uc.species.sum')[0]+'.cluster.aa')
+# load blastn results
+allblastnfiles = glob.glob('%s/*clustercluster*clustercluster*.txt'%(assembly_folder))
+Cluster,Cluster_length,Cluster_count,Cluster_species = load_blastn(allblastnfiles)
+
 # load SNPs and genes with mutations
 lineage_SNP = dict()
 species_lineage = dict()

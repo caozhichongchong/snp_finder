@@ -40,7 +40,7 @@ genus_num_cutoff = 3 # core as genes shared by at least 3 genera
 depth_cutoff = 6
 min_good_alignment_samples = .4 # % of samples with bad alignment
 simulation_round = 1000
-pvalue_max = 0.01
+pvalue_max = 0.05
 
 try:
     os.mkdir(args.snp + '/summary')
@@ -134,38 +134,45 @@ def pvalue_mutgene(SNP, ORFlength,gene_length,gene_set):
     SNP_genome_set_all = set()
     pvalueset = set()
     mut_rate = float(SNP)/ORFlength
-    for gene in gene_set:
-        if gene in gene_length:
+    allgenepvalue = ['gene\tpvalue\n']
+    for gene in gene_length:
+        newgene = 'C_%s_G_%s' % (gene.split('_')[1], gene.split('_')[-1])
+        newgene = '%s__%s' % (lineage_new, newgene)
+        if gene in gene_set:
             SNP_gene,SNP_genome_set,num_strains_with_mut,truncation_gene,N_SNP_gene = gene_set.get(gene,[0,set(),[1],0,0])
             num_strains_with_mut = mean(num_strains_with_mut)
             this_gene_length = gene_length[gene]
             # considering the prevalence of this gene among strains
             pvalue = 1-poisson.cdf(SNP_gene,mut_rate*this_gene_length*num_strains_with_mut) + \
                      poisson.pmf(SNP_gene,mut_rate*this_gene_length*num_strains_with_mut)# greater than and equal to
-            gene = 'C_%s_G_%s' % (gene.split('_')[1], gene.split('_')[-1])
-            newgene ='%s__%s'%(lineage_new,gene)
-            gene = '%s__%s'%(lineage_new,gene)
+            gene = newgene
             flexible = 'Flexible'
             if newgene in Core:
                 # consider flexible genes
                 flexible = 'Core'
             allsum_details.append('%s\t%s\t%s\t%s\t%s\t%s\t%s\t%.3f\t%.5f\t%s\t%s\n'%(lineage,gene,pvalue,SNP_gene,N_SNP_gene,truncation_gene,this_gene_length,num_strains_with_mut,mut_rate*1000,flexible,len(SNP_genome_set)))
+            allgenepvalue.append('%s\t%s\n'%(newgene,pvalue))
             if SNP_gene > 1 and len(SNP_genome_set) > 1 and pvalue <= pvalue_max:
                 # potential PE
                 pvalueset.add(pvalue)
                 SNP_genome_set_all.add(len(SNP_genome_set))
         else:
-            print('gene %s not qualified in lineage %s'%(gene,lineage))
+            allgenepvalue.append('%s\t%s\n' % (newgene, 1))
     pvalueset = list(pvalueset)
     pvalueset.sort(reverse=True)
     SNP_genome_set_all = list(SNP_genome_set_all)
     SNP_genome_set_all.sort()
+    if len(pvalueset) > 0:
+        foutput = open('%s/summary/allgenes.poisson.pvalue.within.%s.details.txt' % (args.snp,lineage), 'w')
+        foutput.write(''.join(allgenepvalue))
+        foutput.close()
     return [pvalueset,SNP_genome_set_all]
 
 def mutation_sim(SNP, ORFlength,gene_length,pvalueset,SNP_genome_set_all):
     gene_num = []
     gene_length_set = []
     num_strains_with_mut = 1 - min_good_alignment_samples# lower bound
+    allgenepvalue = ['simulation\tpvalue\n']
     mut_rate = float(SNP)/ORFlength
     for gene,this_gene_length in gene_length.items():
         gene_num.append(gene)
@@ -174,21 +181,29 @@ def mutation_sim(SNP, ORFlength,gene_length,pvalueset,SNP_genome_set_all):
         gene_mut = random.choices(gene_num, weights=gene_length_set, k=SNP)
         allgenes_mut = set(gene_mut)
         allsim_gene = dict()
-        for geneID in allgenes_mut:
-            SNP_gene = gene_mut.count(geneID)
-            if SNP_gene > 1:
-                # FP PE
+        for geneID in gene_num:
+            if geneID in allgenes_mut:
+                SNP_gene = gene_mut.count(geneID)
                 this_gene_length = gene_length[geneID]
                 pvalue = 1 - poisson.cdf(SNP_gene, mut_rate * this_gene_length * num_strains_with_mut) + \
                          poisson.pmf(SNP_gene,
                                      mut_rate * this_gene_length * num_strains_with_mut)  # greater than and equal to
-                for SNP_gene_sub in range(2,SNP_gene):
-                    allsim_gene.setdefault(SNP_gene_sub,[])
-                    allsim_gene[SNP_gene_sub].append(pvalue)
+                allgenepvalue.append('%s\t%s\n' % (i, pvalue))
+                if SNP_gene > 1:
+                    # FP PE
+                    for SNP_gene_sub in range(2,SNP_gene):
+                        allsim_gene.setdefault(SNP_gene_sub,[])
+                        allsim_gene[SNP_gene_sub].append(pvalue)
+            else:
+                allgenepvalue.append('%s\t%s\n' % (i, 1))
         for SNP_gene_sub in SNP_genome_set_all:
             for pvalue in pvalueset:
                 num_genes_pass_pvalue = len([x for x in allsim_gene.get(SNP_gene_sub,[]) if x <= pvalue])
                 allsum.append('%s\t%s\t%s\t%s\t%s\n'%(lineage,SNP_gene_sub,pvalue,i,num_genes_pass_pvalue))
+    if len(pvalueset) > 0:
+        foutput = open('%s/summary/allgenes.poisson.pvalue.within.simulation.%s.details.txt' % (args.snp, lineage), 'w')
+        foutput.write(''.join(allgenepvalue))
+        foutput.close()
     return allsum
 
 def depth_screening(allSNPscov):

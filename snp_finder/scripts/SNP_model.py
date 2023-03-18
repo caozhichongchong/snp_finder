@@ -41,7 +41,7 @@ optional.add_argument('-t',
                       metavar="1 or more", action='store', default=40, type=int)
 optional.add_argument("-indel",
                       help="whether to insert indels",
-                      type=str, default='True',
+                      type=str, default='False',
                       metavar='False or True')
 
 ################################################## Definition ########################################################
@@ -67,9 +67,9 @@ if time_evaluation:
     input_script_sub = '%s/SNP_model'%(input_script)
 else:
     input_script_sub = '%s/SNP_model_onetime'%(input_script)
-if args.indel == 'False':
-    output_dir += '_noindel'
-    input_script_sub += '_noindel'
+# if args.indel == 'False':
+#     output_dir += '_noindel'
+#     input_script_sub += '_noindel'
 
 latest_mapper = glob.glob('%s/mapper-1*.jar'%(args.s))
 latest_mapper.sort()
@@ -100,6 +100,11 @@ if args.indel == 'False':
 indel_nonorf = list(range(2,17))
 indel_nonorf.extend(list(range(-17,-2)))
 indel_orf = indel_nonorf
+try:
+    os.mkdir(args.o)
+except IOError:
+    pass
+
 try:
     os.mkdir(output_dir)
 except IOError:
@@ -515,9 +520,9 @@ for fastq_file in allgenome:
             # run bowtie and mapper on the same node
             cmds = run_mapper(fastq_file, fastq_file2, mutated_genome, os.path.join(output_dir + '/merge',
                                                                                     mutated_genome_filename + '.mapper1'))
-            cmds += '/usr/bin/time -v sh %s\n'%(os.path.join(input_script_sub, '%s.bowtie.vcf.sh' % (mutated_genome_filename)))
-            cmds += '/usr/bin/time -v sh %s\n' % (os.path.join(input_script_sub, '%s.minimap.vcf.sh' % (mutated_genome_filename)))
-            cmds += '/usr/bin/time -v sh %s\n' % (os.path.join(input_script_sub, '%s.bwa.vcf.sh' % (mutated_genome_filename)))
+            cmds += '/usr/bin/time -v #sh %s\n'%(os.path.join(input_script_sub, '%s.bowtie.vcf.sh' % (mutated_genome_filename)))
+            cmds += '/usr/bin/time -v #sh %s\n' % (os.path.join(input_script_sub, '%s.minimap.vcf.sh' % (mutated_genome_filename)))
+            cmds += '/usr/bin/time -v #sh %s\n' % (os.path.join(input_script_sub, '%s.bwa.vcf.sh' % (mutated_genome_filename)))
             f1 = open(os.path.join(input_script_sub, '%s.mapper1.vcf.sh' % (mutated_genome_filename)), 'w')
             f1.write('#!/bin/bash\nsource ~/.bashrc\n%s' % (''.join(cmds)))
             f1.close()
